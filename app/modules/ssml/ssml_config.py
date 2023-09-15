@@ -11,6 +11,10 @@ Returns:
     _type_: _description_
 """
 
+from azure.cognitiveservices.speech import SpeechConfig, SpeechSynthesizer
+from azure.cognitiveservices.speech.audio import AudioOutputConfig
+
+
 class SSMLConfig:
     """
      _summary_

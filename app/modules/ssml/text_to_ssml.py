@@ -11,8 +11,9 @@ Returns:
 class TextToSSML:
     def __init__(self, voice_name="en-US-Guy24kRUS"):
         """
-        Initialize with a default voice. You can change the voice_name as per your requirements.
-        See Microsoft's documentation for available voice names.
+        Initialize with a default voice. You can change the voice_name as per
+        your requirements. See Microsoft's documentation for available voice
+        names.
         """
         self.voice_name = voice_name
 
@@ -33,13 +34,15 @@ class TextToSSML:
         """
         Changes the speaking rate. Rate can be: "x-slow", "slow", "medium", "fast", "x-fast".
         """
-        return f'<prosody rate="{rate}">{text}</prosody>'
+        rate = ["x-slow", "slow", "medium", "fast", "x-fast"]
+        return f'<prosody rate="{rate[2]}">{text}</prosody>'
 
     def adjust_volume(self, text, volume="medium"):
         """
         Adjusts the volume. Volume can be: "silent", "x-soft", "soft", "medium", "loud", "x-loud".
         """
-        return f'<prosody volume="{volume}">{text}</prosody>'
+        volume = ["silent", "x-soft", "soft", "medium", "loud", "x-loud"]
+        return f'<prosody volume="{volume[0]}">{text}</prosody>'
 
     def convert(self, text):
         """

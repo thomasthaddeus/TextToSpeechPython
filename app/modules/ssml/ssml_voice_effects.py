@@ -7,6 +7,8 @@ Returns:
     str: An SSML-formatted string with the desired voice effects.
 """
 
+import azure.cognitiveservices.speech as speechsdk
+
 
 class SSMLVoiceEffects:
     """
@@ -18,32 +20,6 @@ class SSMLVoiceEffects:
     Returns:
         str: An SSML-formatted string with the desired voice effects.
     """
-
-    # Define a list of supported voices.
-    SUPPORTED_VOICES = [
-        "en-US-JennyNeural",
-        "en-US-GuyNeural",
-        "en-US-AriaNeural",
-        "en-US-DavisNeural",
-        "en-US-AmberNeural",
-        "en-US-AnaNeural",
-        "en-US-AshleyNeural",
-        "en-US-BrandonNeural",
-        "en-US-ChristopherNeural",
-        "en-US-CoraNeural",
-        "en-US-ElizabethNeural",
-        "en-US-EricNeural",
-        "en-US-JacobNeural",
-        "en-US-JaneNeural",
-        "en-US-JasonNeural",
-        "en-US-MichelleNeural",
-        "en-US-MonicaNeural",
-        "en-US-NancyNeural",
-        "en-US-RogerNeural",
-        "en-US-SaraNeural",
-        "en-US-SteffanNeural",
-        "en-US-TonyNeural"
-    ]
 
     def __init__(
         self,
@@ -66,7 +42,6 @@ class SSMLVoiceEffects:
         self.default_voice = default_voice
         self.default_rate = default_rate
         self.default_volume = default_volume
-        self._voice = self.SUPPORTED_VOICES[0]  # Set a default voice
 
     @property
     def default_prosody(self):
@@ -107,8 +82,9 @@ class SSMLVoiceEffects:
             str: Text wrapped with the specified voice.
         """
         voice_name = voice_name if voice_name else self.default_voice
+        voice_name = voice_name or self.config.get_voice()
 
-        if voice_name not in self.SUPPORTED_VOICES:
+        if voice_name not in self.config.list_voices():
             raise ValueError(f"Voice '{voice_name}' is not supported!")
 
         return f'<voice name="{voice_name}">{text}</voice>'
