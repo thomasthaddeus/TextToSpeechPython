@@ -3,7 +3,7 @@ azure-cognitiveservices-speech==1.32.1
 cffi==1.15.1
 click==8.1.7
 colorama==0.4.6
-cryptography==41.0.4
+cryptography==41.0.6
 lxml==4.9.3
 numpy==1.25.2
 pefile==2023.2.7
