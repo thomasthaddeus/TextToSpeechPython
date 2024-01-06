@@ -1,0 +1,38 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+altgraph = "*"
+azure-cognitiveservices-speech = "*"
+cffi = "*"
+click = "*"
+colorama = "*"
+cryptography = "*"
+lxml = "*"
+numpy = "*"
+pefile = "*"
+Pillow = "*"
+pycparser = "*"
+pyinstaller = "*"
+pyinstaller-hooks-contrib = "*"
+PyQt6 = "*"
+pyqt6-plugins = "*"
+PyQt6-Qt6 = "*"
+PyQt6-sip = "*"
+pyqt6-tools = "*"
+python-dotenv = "*"
+python-pptx = "*"
+pywin32-ctypes = "*"
+qt6-applications = "*"
+qt6-tools = "*"
+scipy = "*"
+XlsxWriter = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.11"
+
+[scripts]
