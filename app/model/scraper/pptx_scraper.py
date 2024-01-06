@@ -1,53 +1,52 @@
 """pptx_scraper.py
 
-_summary_
+This module contains the PPTXScraper class, which is designed to extract text
+and notes from PowerPoint (PPTX) presentations and optionally save this data to
+a CSV file.
 
-_extended_summary_
+The PPTXScraper class takes the path of a PowerPoint file as input, reads
+through each slide, and collects the text and notes. This can be particularly
+useful for extracting information from presentations for analysis, archiving,
+or processing.
 
-Returns:
-    _type_: _description_
-
-Ex:
-pptx_path = "path_to_your_pptx_file.pptx"
-csv_path = "output_file.csv"
-scraper = PPTXScraper(pptx_path)
-scraper.save_to_csv(csv_path)
+Example:
+    pptx_path = "path_to_your_pptx_file.pptx"
+    csv_path = "output_file.csv"
+    scraper = PPTXScraper(pptx_path)
+    scraper.save_to_csv(csv_path)
 """
 
 import csv
 from pptx import Presentation
 
-
 class PPTXScraper:
     """
-     _summary_
+    A class for scraping text and notes from PowerPoint (PPTX) files.
 
-    _extended_summary_
+    This class provides methods to extract text from each slide and its
+    corresponding notes, then compile this information into a structured
+    format, such as a list or a CSV file.
     """
 
     def __init__(self, pptx_path):
         """
-        __init__ _summary_
-
-        _extended_summary_
+        Initialize the PPTXScraper with the path to a PowerPoint file.
 
         Args:
-            pptx_path (_type_): _description_
+            pptx_path (str): Path to the PowerPoint (PPTX) file to be processed.
         """
         self.pptx_path = pptx_path
         self.presentation = Presentation(pptx_path)
 
     def _get_slide_text(self, slide):
         """
-        _get_slide_text _summary_
-
-        _extended_summary_
+        Extract text from a single slide.
 
         Args:
-            slide (_type_): _description_
+            slide (Slide): A slide object from the PowerPoint presentation.
 
         Returns:
-            _type_: _description_
+            str: All text found in the slide, concatenated and separated by spaces.
         """
         text = ""
         for shape in slide.shapes:
@@ -57,15 +56,13 @@ class PPTXScraper:
 
     def _get_slide_notes(self, slide):
         """
-        _get_slide_notes _summary_
-
-        _extended_summary_
+        Extract notes from a single slide.
 
         Args:
-            slide (_type_): _description_
+            slide (Slide): A slide object from the PowerPoint presentation.
 
         Returns:
-            _type_: _description_
+            str: Text from the notes section of the slide, if available.
         """
         if slide.has_notes_slide:
             return slide.notes_slide.notes_text_frame.text
@@ -73,28 +70,24 @@ class PPTXScraper:
 
     def scrape(self):
         """
-        scrape _summary_
-
-        _extended_summary_
+        Scrape text and notes from all slides in the presentation.
 
         Returns:
-            _type_: _description_
+            list: A list of tuples, each containing the slide number, slide text, and notes text.
         """
         data = []
         for i, slide in enumerate(self.presentation.slides, start=1):
             slide_text = self._get_slide_text(slide)
             notes_text = self._get_slide_notes(slide)
-            data.append([i, slide_text, notes_text])
+            data.append((i, slide_text, notes_text))
         return data
 
     def save_to_csv(self, csv_path):
         """
-        save_to_csv _summary_
-
-        _extended_summary_
+        Save the scraped data to a CSV file.
 
         Args:
-            csv_path (_type_): _description_
+            csv_path (str): Path where the CSV file will be saved.
         """
         data = self.scrape()
         with open(csv_path, "w", newline="", encoding="utf-8") as file:

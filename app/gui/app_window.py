@@ -1,5 +1,12 @@
+"""app_window.py
+_summary_
+
+_extended_summary_
+"""
+
 import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow
+from controller.compute_controller import ComputeController
 import design
 import mylib
 
@@ -8,6 +15,7 @@ class ComputeAppWindow(QMainWindow, design.Ui_MainWindow):
         super().__init__()
         self.setupUi(self)
         self.computeButton.clicked.connect(self.on_compute)
+        self.controller = ComputeController(self)
 
     def on_compute(self):
         try:
