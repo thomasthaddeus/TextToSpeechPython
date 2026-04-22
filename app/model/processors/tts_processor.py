@@ -7,8 +7,8 @@ Returns:
     _type_: _description_
 """
 
-from api.azure_tts_api import AzureTTSAPI
-from ssml_audio_processor import SSMLAudioProcessor
+from app.model.api.azure_tts_api import AzureTTSAPI
+from app.model.processors.ssml_audio_processor import SSMLAudioProcessor
 
 
 class TTSProcessor:

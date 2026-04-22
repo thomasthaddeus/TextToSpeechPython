@@ -1,5 +1,5 @@
-from second_controller import SecondController
-from second_window import SecondApp
+from app.controller.second_controller import SecondController
+from app.gui.second_window import SecondApp
 
 class MainController:
     def __init__(self, view):

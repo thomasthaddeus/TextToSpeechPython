@@ -161,3 +161,4 @@ cython_debug/
 
 .config/
 app/.conf/pyproject.toml
+scripts/
