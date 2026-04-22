@@ -8,9 +8,9 @@ Returns:
 """
 
 import pandas as pd
-from api.azure_tts_api import AzureTTSAPI
-from scraper.pptx_scraper import PPTXScraper
-from ssml_audio_processor import SSMLAudioProcessor
+from app.model.api.azure_tts_api import AzureTTSAPI
+from app.model.scraper.pptx_scraper import PPTXScraper
+from app.model.processors.ssml_audio_processor import SSMLAudioProcessor
 
 
 class DataProcessor:

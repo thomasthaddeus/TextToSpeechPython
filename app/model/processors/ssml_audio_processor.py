@@ -28,7 +28,7 @@ for text in text_list:
 
 import os
 from azure.cognitiveservices.speech import SpeechConfig, SpeechSynthesisOutputFormat, SpeechSynthesizer
-from api.azure_tts_api import AzureTTSAPI
+from app.model.api.azure_tts_api import AzureTTSAPI
 
 # Use the above classes
 SUBSCRIPTION_KEY = 'YOUR_AZURE_SUBSCRIPTION_KEY'

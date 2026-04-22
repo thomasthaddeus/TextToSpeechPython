@@ -6,8 +6,8 @@ _extended_summary_
 
 from PyQt6.QtWidgets import QMainWindow
 import main_window
-from second_window import SecondApp
-from controller.main_controller import MainController
+from app.gui.second_window import SecondApp
+from app.controller.main_controller import MainController
 
 class MainApp(QMainWindow, main_window.Ui_MainWindow):
     def __init__(self):

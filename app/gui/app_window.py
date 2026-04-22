@@ -6,7 +6,7 @@ _extended_summary_
 
 import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow
-from controller.compute_controller import ComputeController
+from app.controller.compute_controller import ComputeController
 import design
 import mylib
 
