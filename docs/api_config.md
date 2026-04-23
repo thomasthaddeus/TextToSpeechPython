@@ -1,54 +1,33 @@
 # API Config
 
-Creating a `.env` file is a common way to manage environment variables that your application might need. In your specific case, since the code is looking for an API key in a configuration file, you can create the `.env` file in the following way:
+The current application reads Azure Speech settings from a local configuration
+file using `configparser`. The project uses `.env` as the default filename, but
+the contents are INI-style rather than shell-style environment variable lines.
 
-1. Open a text editor like Notepad, Sublime Text, VS Code, or any code editor you prefer.
-2. Write the configuration information in the following format:
+## Expected Format
 
-   ```ini
-   [API]
-   key = YOUR_API_KEY_HERE
-   ```
-
-   Replace `YOUR_API_KEY_HERE` with the actual API key you want to use.
-
-3. Save this file with the name `.env` in the directory where your `api_config.py` script resides.
-
-Note that you don't necessarily have to name the file `.env` if you provide the exact path in the `get_api_key` function. In the example above, it expects a file with that name because of this line in the script:
-
-```python
-get_api_key(config_file_path=".env")
-```
+Create a local `.env` file with the following structure:
 
 ```ini
 [API]
-key = YOUR_API_KEY_HERE
-
-[PATHS]
-config_path = /path/to/your/config/file
+key = YOUR_AZURE_SPEECH_KEY
+region = YOUR_AZURE_REGION
 ```
 
-If you're going to access these values in your code, you'll need to modify the code to read the additional parameters accordingly.
+Both values are required.
 
-Here's an example of how you could modify the `get_api_key` function to also read a path variable:
+## What the Code Reads
 
-```python
-def get_api_key(config_file_path):
-    config = configparser.ConfigParser()
+The configuration helpers support:
 
-    if not os.path.exists(config_file_path):
-        raise FileNotFoundError(f"Config file not found at '{config_file_path}'")
+- `get_api_key(config_file_path)` for callers that only need the key
+- `get_api_settings(config_file_path)` for callers that need both the key and
+  region
 
-    config.read(config_file_path)
+## Notes
 
-    if "API" not in config or "key" not in config["API"]:
-        raise ValueError("API key not found in config file")
-
-    if "PATHS" in config and "config_path" in config["PATHS"]:
-        config_path = config["PATHS"]["config_path"]
-        # You can now use the config_path variable as needed
-
-    return config["API"]["key"]
-```
-
-Including the `.env` file in your `.gitignore` file is a good practice, as it prevents the file from being tracked by Git. This helps keep sensitive information out of your public code repositories. If different environments (e.g., development, staging, production) need different `.env` files, you can manage them separately without version-controlling the actual files.
+- The `.env` file should remain local and uncommitted.
+- If you prefer a different filename, pass its path into the configuration
+  helper.
+- A future packaging pass may switch the project to a different configuration
+  strategy, but this is the format the current code expects.

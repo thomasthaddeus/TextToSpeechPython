@@ -28,6 +28,46 @@ import os
 import configparser
 
 
+def get_api_settings(config_file_path):
+    """
+    Retrieves Azure API settings from a given configuration file.
+
+    Args:
+        config_file_path (str): Path to the configuration file.
+
+    Raises:
+        FileNotFoundError: Raised when the specified configuration file does
+        not exist.
+        ValueError: Raised when required API settings are missing.
+
+    Returns:
+        tuple[str, str]: The subscription key and Azure region.
+    """
+    config = configparser.ConfigParser()
+
+    if not os.path.exists(config_file_path):
+        raise FileNotFoundError(
+            f"Config file not found at '{config_file_path}'"
+        )
+
+    config.read(config_file_path)
+
+    if "API" not in config:
+        raise ValueError("API settings not found in config file")
+
+    api_section = config["API"]
+    subscription_key = api_section.get("key")
+    region = api_section.get("region")
+
+    if not subscription_key:
+        raise ValueError("API key not found in config file")
+
+    if not region:
+        raise ValueError("API region not found in config file")
+
+    return subscription_key, region
+
+
 def get_api_key(config_file_path):
     """
     Retrieves the API key from a given configuration file.
@@ -49,19 +89,8 @@ def get_api_key(config_file_path):
     Returns:
         str: Returns the API key as a string.
     """
-    config = configparser.ConfigParser()
-
-    if not os.path.exists(config_file_path):
-        raise FileNotFoundError(
-            f"Config file not found at '{config_file_path}'"
-        )
-
-    config.read(config_file_path)
-
-    if "API" not in config or "key" not in config["API"]:
-        raise ValueError("API key not found in config file")
-
-    return config["API"]["key"]
+    subscription_key, _ = get_api_settings(config_file_path)
+    return subscription_key
 
 
 if __name__ == "__main__":

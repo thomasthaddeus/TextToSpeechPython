@@ -13,10 +13,6 @@ Returns:
     SSMLConfig: An instance of the SSMLConfig class.
 """
 
-from azure.cognitiveservices.speech import SpeechConfig, SpeechSynthesizer
-from azure.cognitiveservices.speech.audio import AudioOutputConfig
-
-
 class SSMLConfig:
     """
     SSMLConfig is a class that encapsulates the configuration settings for

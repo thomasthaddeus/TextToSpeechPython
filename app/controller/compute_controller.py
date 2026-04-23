@@ -1,4 +1,5 @@
-import mylib
+from app import mylib
+
 
 class ComputeController:
     def __init__(self, view):

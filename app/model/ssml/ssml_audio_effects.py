@@ -103,7 +103,7 @@ class SSMLAudioEffects:
         Returns:
             str: SSML string with the fade-in effect applied.
         """
-        return f'<audio fadeOutDur="{duration}">{text}</audio>'
+        return f'<audio fadeInDur="{duration}">{text}</audio>'
 
     def fade_out(self, text, duration="2s"):
         """
@@ -116,7 +116,7 @@ class SSMLAudioEffects:
         Returns:
             str: SSML string with the fade-out effect applied.
         """
-        return f'<audio fadeInDur="{duration}">{text}</audio>'
+        return f'<audio fadeOutDur="{duration}">{text}</audio>'
 
     def insert_pause(self, text, pause_duration="1s", before=True):
         """

@@ -9,8 +9,8 @@ Returns:
 
 import pandas as pd
 from app.model.api.azure_tts_api import AzureTTSAPI
-from app.model.scraper.pptx_scraper import PPTXScraper
 from app.model.processors.ssml_audio_processor import SSMLAudioProcessor
+from app.model.scraper.pptx_scraper import PPTXScraper
 
 
 class DataProcessor:
@@ -19,20 +19,19 @@ class DataProcessor:
 
     _extended_summary_
     """
-    def __init__(self, api_config_path, ssml_config_path):
+    def __init__(self, api_config_path, ssml_config_path=None):
         """
         __init__ _summary_
 
         _extended_summary_
 
         Args:
-            api_config_path (_type_): _description_
-            ssml_config_path (_type_): _description_
+            api_config_path (_type_): Path to Azure API configuration.
+            ssml_config_path (_type_): Retained for backward compatibility.
         """
         # Initialize API and SSML processors with their respective configurations
         self.api_processor = AzureTTSAPI(api_config_path)
-        self.ssml_processor = SSMLAudioProcessor(ssml_config_path)
-        self.pptx_scraper = PPTXScraper()
+        self.ssml_processor = SSMLAudioProcessor()
 
     def process_text_data(self, text):
         """
@@ -63,7 +62,7 @@ class DataProcessor:
             _type_: _description_
         """
         # Generate TTS audio from SSML data
-        audio_data = self.api_processor.text_to_speech(ssml_data)
+        audio_data = self.api_processor.get_audio_from_ssml(ssml_data)
         return audio_data
 
     def extract_data_from_pptx(self, pptx_path):
@@ -79,7 +78,7 @@ class DataProcessor:
             _type_: _description_
         """
         # Extract data from PPTX file
-        extracted_data = self.pptx_scraper.scrape_pptx(pptx_path)
+        extracted_data = PPTXScraper().scrape_pptx(pptx_path)
         return extracted_data
 
     def load_and_process_datafile(self, datafile_path):
@@ -97,5 +96,5 @@ class DataProcessor:
         # Load and process a data file (e.g., CSV, Excel)
         df = pd.read_csv(datafile_path)
         # Add any specific data processing steps here
-        processed_data = df # Placeholder for further processing
+        processed_data = df
         return processed_data
