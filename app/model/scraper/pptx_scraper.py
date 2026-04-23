@@ -19,6 +19,7 @@ Example:
 import csv
 from pptx import Presentation
 
+
 class PPTXScraper:
     """
     A class for scraping text and notes from PowerPoint (PPTX) files.
@@ -28,15 +29,16 @@ class PPTXScraper:
     format, such as a list or a CSV file.
     """
 
-    def __init__(self, pptx_path):
+    def __init__(self, pptx_path=None):
         """
         Initialize the PPTXScraper with the path to a PowerPoint file.
 
         Args:
-            pptx_path (str): Path to the PowerPoint (PPTX) file to be processed.
+            pptx_path (str | None): Path to the PowerPoint (PPTX) file to be
+                processed.
         """
         self.pptx_path = pptx_path
-        self.presentation = Presentation(pptx_path)
+        self.presentation = Presentation(pptx_path) if pptx_path else None
 
     def _get_slide_text(self, slide):
         """
@@ -75,12 +77,23 @@ class PPTXScraper:
         Returns:
             list: A list of tuples, each containing the slide number, slide text, and notes text.
         """
+        if self.presentation is None:
+            raise ValueError("No PowerPoint file has been loaded.")
+
         data = []
         for i, slide in enumerate(self.presentation.slides, start=1):
             slide_text = self._get_slide_text(slide)
             notes_text = self._get_slide_notes(slide)
             data.append((i, slide_text, notes_text))
         return data
+
+    def scrape_pptx(self, pptx_path):
+        """
+        Backward-compatible helper that loads a PPTX file and scrapes it.
+        """
+        self.pptx_path = pptx_path
+        self.presentation = Presentation(pptx_path)
+        return self.scrape()
 
     def save_to_csv(self, csv_path):
         """

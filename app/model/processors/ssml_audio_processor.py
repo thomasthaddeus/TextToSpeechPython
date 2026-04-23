@@ -1,86 +1,82 @@
-"""ssml_audio_processor.py
-
-This module provides a class for processing Speech Synthesis Markup Language
-(SSML) to generate audio using Azure's Text-to-Speech (TTS) service. It
-includes functionalities for generating audio from SSML strings and saving them
-as files.
-
-The SSMLAudioProcessor class utilizes an instance of AzureTTSAPI to convert
-SSML strings into audio. It supports saving the generated audio into specified
-directories with a base filename and an incremental counter to differentiate
-between files.
-
-Example:
-
-tts_api = AzureTTSAPI(SUBSCRIPTION_KEY, REGION)
-processor = SSMLAudioProcessor(tts_api, './output', 'sample_audio')
-
-audio_effects = SSMLAudioEffects()
-text_list = ["Hello, how are you?", "Goodbye!", "See you soon!"]
-
-for text in text_list:
-    ssml = audio_effects.add_background_sound(
-        text,
-        "http://example.com/background.mp3"
-    )
-    processor.generate_and_save_audio(ssml)
-"""
+"""Helpers for turning text into SSML and optionally saving synthesized audio."""
 
 import os
-from azure.cognitiveservices.speech import SpeechConfig, SpeechSynthesisOutputFormat, SpeechSynthesizer
-from app.model.api.azure_tts_api import AzureTTSAPI
-
-# Use the above classes
-SUBSCRIPTION_KEY = 'YOUR_AZURE_SUBSCRIPTION_KEY'
-REGION = 'YOUR_AZURE_REGION'
+from app.model.ssml.ssml_config import SSMLConfig
+from app.model.ssml.text_to_ssml import TextToSSML
 
 
 class SSMLAudioProcessor:
     """
-    A class to process SSML for audio generation using Azure Text-to-Speech services.
-
-    This class provides methods to generate audio from SSML strings and to save
-    the audio in a specified directory.
-
-    Attributes:
-        tts_api (AzureTTSAPI): An instance of AzureTTSAPI for TTS operations.
-        output_dir (str): Directory where generated audio files will be saved.
-        base_filename (str): Base filename for saving audio files.
-        counter (int): A counter to append to filenames for uniqueness.
+    Build SSML snippets and optionally save synthesized audio to disk.
     """
 
-    def __init__(self, tts_api, output_dir, base_filename):
+    def __init__(
+        self,
+        tts_api=None,
+        output_dir=None,
+        base_filename="audio",
+        voice_name=None,
+    ):
         """
-        Initializes the SSMLAudioProcessor with AzureTTSAPI instance, output directory, and base filename.
+        Initialize the SSML processor.
 
         Args:
-            tts_api (AzureTTSAPI): An instance of AzureTTSAPI for TTS operations.
-            output_dir (str): Directory where generated audio files will be saved.
+            tts_api (AzureTTSAPI | None): Optional API client used for saving
+                synthesized SSML to audio files.
+            output_dir (str | None): Directory where generated audio files
+                will be saved.
             base_filename (str): Base filename for saving audio files.
+            voice_name (str | None): Voice override for generated SSML.
         """
         self.tts_api = tts_api
         self.output_dir = output_dir
         self.base_filename = base_filename
-        self.counter = 0  # Counter to append to filenames
+        self.counter = 0
+        self.ssml_config = SSMLConfig()
+
+        if voice_name:
+            self.ssml_config.set_voice(voice_name)
+
+        self.text_converter = TextToSSML(
+            voice_name=self.ssml_config.get_voice()
+        )
+
+    def convert_text_to_ssml(self, text):
+        """
+        Convert plain text into a basic SSML document.
+        """
+        return self.text_converter.convert(text)
+
+    def process_ssml(self, text):
+        """
+        Return valid SSML, converting plain text when needed.
+        """
+        stripped_text = text.lstrip()
+        if stripped_text.startswith("<speak"):
+            return text
+        return self.convert_text_to_ssml(text)
 
     def generate_and_save_audio(self, ssml):
         """
-        Generates audio from an SSML string and saves it as a file in the specified output directory.
+        Generate audio from SSML and save it to disk.
 
         Args:
             ssml (str): The SSML string from which audio will be generated.
-
-        Extended Summary:
-            This method utilizes the tts_api instance to convert the provided SSML string
-            into audio data. It then saves this audio data to a file, naming it using
-            the base_filename and an incremental counter.
         """
+        if self.tts_api is None:
+            raise ValueError("A configured AzureTTSAPI instance is required.")
+
+        if not self.output_dir:
+            raise ValueError("An output directory is required to save audio.")
+
         audio_data = self.tts_api.get_audio_from_ssml(ssml)
+        os.makedirs(self.output_dir, exist_ok=True)
 
         filename = f"{self.base_filename}_{self.counter}.mp3"
         filepath = os.path.join(self.output_dir, filename)
 
-        with open(filepath, 'wb') as f:
-            f.write(audio_data)
+        with open(filepath, "wb") as file:
+            file.write(audio_data)
 
         self.counter += 1
+        return filepath

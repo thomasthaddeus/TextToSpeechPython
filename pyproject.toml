@@ -1,0 +1,34 @@
+[project]
+name = "texttospeechpython"
+version = "0.1.0"
+description = "PyQt desktop app for experimenting with Azure text-to-speech and SSML workflows."
+readme = "README.md"
+authors = [{ name = "Thaddeus Maximus" }]
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "azure-cognitiveservices-speech",
+    "pandas",
+    "pillow",
+    "pyqt6",
+    "python-pptx",
+    "xlsxwriter",
+]
+
+[project.scripts]
+tts-app = "app.main:main"
+
+[tool.poetry]
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = ">=3.11,<4.0"
+azure-cognitiveservices-speech = "*"
+pandas = "*"
+pillow = "*"
+pyqt6 = "*"
+python-pptx = "*"
+xlsxwriter = "*"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

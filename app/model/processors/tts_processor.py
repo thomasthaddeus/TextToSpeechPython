@@ -17,18 +17,18 @@ class TTSProcessor:
 
     _extended_summary_
     """
-    def __init__(self, api_config_path, ssml_config_path):
+    def __init__(self, api_config_path, ssml_config_path=None):
         """
         Initialize the Azure TTS API and SSML processor with configuration paths
 
         _extended_summary_
 
         Args:
-            api_config_path (_type_): _description_
-            ssml_config_path (_type_): _description_
+            api_config_path (_type_): Path to Azure API configuration.
+            ssml_config_path (_type_): Retained for backward compatibility.
         """
         self.azure_tts_api = AzureTTSAPI(api_config_path)
-        self.ssml_processor = SSMLAudioProcessor(ssml_config_path)
+        self.ssml_processor = SSMLAudioProcessor()
 
     def text_to_speech(self, text, use_ssml=False):
         """
@@ -51,4 +51,4 @@ class TTSProcessor:
 
         return audio_data
 
-    # Additional methods can be added here for more specific TTS processing tasks.
+    # TODO: Additional methods can be added here for more specific TTS processing tasks.

@@ -1,44 +1,61 @@
 # Text-to-Speech Python Program
 
-## 🔊 **Description**:
+## Description
 
-This repository contains a Python-based text-to-speech (TTS) program that converts written text into spoken words. Leveraging state-of-the-art TTS libraries, this program aims to provide clear and natural-sounding audio output for a variety of applications, from audiobook generation to accessibility tools.
+This repository contains a PyQt-based desktop application for experimenting
+with text-to-speech workflows and SSML helpers for Azure Speech.
 
-## **Features**:
+The codebase currently includes:
 
-- Convert any written text into clear, natural-sounding speech.
-- Supports multiple languages and dialects.
-- Adjustable speech rate, pitch, and volume.
-- Intuitive command-line interface for easy use.
-- Potential integration with web applications and other platforms.
+- a main application window with a secondary dialog
+- a small compute demo window used by the controller examples
+- helpers for converting plain text into SSML
+- Azure Speech client wrappers for synthesizing text and SSML
+- PowerPoint scraping utilities for extracting slide text and notes
 
-## **Applications**
+## Installation
 
-- Assistive technology for visually impaired individuals.
-- Audiobook generation from written content.
-- Voiceovers for videos and presentations.
-- Learning tools for language learners.
+Poetry is now the recommended way to manage this project.
 
-### **Dependencies**
-
-- [Library/Module 1]
-- [Library/Module 2]
-- ...
-
-## **Usage**
+Install dependencies with:
 
 ```bash
-python tts_program.py --input "Your text here"
+poetry install
 ```
 
-## **Contribution**
+## Configuration
 
-Feel free to fork this repository, make improvements, and create a pull request. We welcome any enhancements and bug fixes to make this tool even better!
+Create a local `.env` file in INI format with your Azure credentials:
 
-## **License**
+```ini
+[API]
+key = YOUR_AZURE_SPEECH_KEY
+region = YOUR_AZURE_REGION
+```
 
-This project is licensed under the MIT License. See the `LICENSE` file for more details.
+The `.env` file is intended for local development and should not be committed.
 
----
+## Usage
 
-Note: The placeholders like `[Library/Module 1]` should be replaced with actual library or module names used in the program.
+Launch the desktop application from the project root:
+
+```bash
+poetry run python -m app.main
+```
+
+or use the Poetry script entrypoint:
+
+```bash
+poetry run tts-app
+```
+
+## Status
+
+The project is still being cleaned up and stabilized. The code now uses
+package-qualified imports, committed in-repo UI modules, and a Poetry-based
+project manifest, but additional work is still planned around tests and runtime
+polish.
+
+## License
+
+This project is licensed under the MIT License. See `LICENSE` for details.

@@ -11,7 +11,7 @@ synthesis in applications where nuanced voice modulation is required.
 """
 
 class TextToSSML:
-    def __init__(self, voice_name="en-US-Guy24kRUS"):
+    def __init__(self, voice_name="en-US-GuyNeural"):
         """
         Initializes the TextToSSML class with a default voice name. The voice
         name can be changed according to the available voices in Microsoft's
@@ -23,7 +23,7 @@ class TextToSSML:
 
         Args:
             voice_name (str, optional): The name of the voice to be used in
-            SSML. Defaults to "en-US-Guy24kRUS".
+            SSML. Defaults to "en-US-GuyNeural".
         """
         self.voice_name = voice_name
 

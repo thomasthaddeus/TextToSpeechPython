@@ -7,7 +7,7 @@ Returns:
     str: An SSML-formatted string with the desired voice effects.
 """
 
-import azure.cognitiveservices.speech as speechsdk
+from app.model.ssml.ssml_config import SSMLConfig
 
 
 class SSMLVoiceEffects:
@@ -23,7 +23,7 @@ class SSMLVoiceEffects:
 
     def __init__(
         self,
-        default_voice="en-US-Guy24kRUS",
+        default_voice="en-US-GuyNeural",
         default_rate="medium",
         default_volume="medium",
     ):
@@ -33,15 +33,19 @@ class SSMLVoiceEffects:
 
         Args:
             default_voice (str, optional): The default voice to use. Defaults
-              to "en-US-Guy24kRUS".
+              to "en-US-GuyNeural".
             default_rate (str, optional): The default speech rate. Defaults to
               "medium".
             default_volume (str, optional): The default volume level. Defaults
               to "medium".
         """
+        self.config = SSMLConfig()
         self.default_voice = default_voice
         self.default_rate = default_rate
         self.default_volume = default_volume
+
+        if default_voice:
+            self.config.set_voice(default_voice)
 
     @property
     def default_prosody(self):
@@ -81,8 +85,7 @@ class SSMLVoiceEffects:
         Returns:
             str: Text wrapped with the specified voice.
         """
-        voice_name = voice_name if voice_name else self.default_voice
-        voice_name = voice_name or self.config.get_voice()
+        voice_name = voice_name if voice_name else self.config.get_voice()
 
         if voice_name not in self.config.list_voices():
             raise ValueError(f"Voice '{voice_name}' is not supported!")
