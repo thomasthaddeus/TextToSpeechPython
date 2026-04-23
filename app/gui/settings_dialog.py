@@ -1,0 +1,140 @@
+"""Settings dialog for the desktop application."""
+
+from pathlib import Path
+
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QSlider,
+    QVBoxLayout,
+)
+from PyQt6.QtCore import Qt
+
+from app.model.app_settings import AppSettings
+from app.model.ssml.ssml_config import SSMLConfig
+
+
+class SettingsDialog(QDialog):
+    """
+    Modal dialog for editing application settings.
+    """
+
+    RATE_OPTIONS = ["x-slow", "slow", "medium", "fast", "x-fast"]
+    VOLUME_OPTIONS = ["silent", "x-soft", "soft", "medium", "loud", "x-loud"]
+
+    def __init__(self, settings, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Settings")
+        self.settings = AppSettings(**settings.__dict__)
+        self.voice_config = SSMLConfig()
+        self._build_ui()
+        self._load_settings()
+
+    def _build_ui(self):
+        main_layout = QVBoxLayout(self)
+        form_layout = QFormLayout()
+
+        self.voice_combo = QComboBox(self)
+        self.voice_combo.addItems(self.voice_config.list_voices())
+        form_layout.addRow("Voice", self.voice_combo)
+
+        self.rate_combo = QComboBox(self)
+        self.rate_combo.addItems(self.RATE_OPTIONS)
+        form_layout.addRow("Speech Rate", self.rate_combo)
+
+        self.synthesis_volume_combo = QComboBox(self)
+        self.synthesis_volume_combo.addItems(self.VOLUME_OPTIONS)
+        form_layout.addRow("Speech Volume", self.synthesis_volume_combo)
+
+        playback_row = QHBoxLayout()
+        self.playback_volume_slider = QSlider(Qt.Orientation.Horizontal, self)
+        self.playback_volume_slider.setRange(0, 100)
+        self.playback_volume_label = QLabel(self)
+        self.playback_volume_slider.valueChanged.connect(
+            self._update_playback_label
+        )
+        playback_row.addWidget(self.playback_volume_slider)
+        playback_row.addWidget(self.playback_volume_label)
+        form_layout.addRow("Playback Volume", playback_row)
+
+        output_row = QHBoxLayout()
+        self.output_dir_edit = QLineEdit(self)
+        self.browse_button = QPushButton("Browse", self)
+        self.browse_button.clicked.connect(self._choose_output_dir)
+        output_row.addWidget(self.output_dir_edit)
+        output_row.addWidget(self.browse_button)
+        form_layout.addRow("Output Directory", output_row)
+
+        self.auto_clean_checkbox = QCheckBox(
+            "Clean text before generating speech",
+            self,
+        )
+        form_layout.addRow("", self.auto_clean_checkbox)
+
+        main_layout.addLayout(form_layout)
+
+        button_row = QHBoxLayout()
+        self.save_button = QPushButton("Save", self)
+        self.cancel_button = QPushButton("Cancel", self)
+        self.save_button.clicked.connect(self._accept_if_valid)
+        self.cancel_button.clicked.connect(self.reject)
+        button_row.addStretch(1)
+        button_row.addWidget(self.save_button)
+        button_row.addWidget(self.cancel_button)
+        main_layout.addLayout(button_row)
+
+    def _load_settings(self):
+        self.voice_combo.setCurrentText(self.settings.voice)
+        self.rate_combo.setCurrentText(self.settings.speaking_rate)
+        self.synthesis_volume_combo.setCurrentText(self.settings.synthesis_volume)
+        self.playback_volume_slider.setValue(self.settings.playback_volume)
+        self.output_dir_edit.setText(self.settings.output_dir)
+        self.auto_clean_checkbox.setChecked(self.settings.auto_clean_text)
+        self._update_playback_label(self.settings.playback_volume)
+
+    def _update_playback_label(self, value):
+        self.playback_volume_label.setText(f"{value}%")
+
+    def _choose_output_dir(self):
+        chosen_dir = QFileDialog.getExistingDirectory(
+            self,
+            "Choose Output Directory",
+            self.output_dir_edit.text() or str(Path.cwd()),
+        )
+        if chosen_dir:
+            self.output_dir_edit.setText(chosen_dir)
+
+    def get_settings(self):
+        """
+        Build a validated settings object from the dialog state.
+        """
+        output_dir = self.output_dir_edit.text().strip()
+        if not output_dir:
+            QMessageBox.warning(
+                self,
+                "Missing Output Directory",
+                "Choose a directory for generated audio files.",
+            )
+            return None
+
+        self.settings.voice = self.voice_combo.currentText()
+        self.settings.speaking_rate = self.rate_combo.currentText()
+        self.settings.synthesis_volume = (
+            self.synthesis_volume_combo.currentText()
+        )
+        self.settings.playback_volume = self.playback_volume_slider.value()
+        self.settings.output_dir = output_dir
+        self.settings.auto_clean_text = self.auto_clean_checkbox.isChecked()
+        return self.settings
+
+    def _accept_if_valid(self):
+        if self.get_settings() is not None:
+            self.accept()
