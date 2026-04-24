@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QListWidget,
     QMainWindow,
     QMenu,
     QMenuBar,
@@ -96,6 +97,16 @@ class Ui_MainWindow:
         playback_layout.addWidget(self.playbackVolumeSlider)
         playback_layout.addWidget(self.playbackVolumeValueLabel)
         controls_layout.addWidget(self.playbackGroup, 2, 0, 1, 2)
+
+        self.historyGroup = QGroupBox("Recent Audio", central_widget)
+        history_layout = QVBoxLayout(self.historyGroup)
+        self.historyList = QListWidget(self.historyGroup)
+        self.historyList.setAlternatingRowColors(True)
+        self.historyList.setSelectionMode(
+            QListWidget.SelectionMode.NoSelection
+        )
+        history_layout.addWidget(self.historyList)
+        controls_layout.addWidget(self.historyGroup, 3, 0, 1, 2)
 
         root_layout.addLayout(controls_layout)
 

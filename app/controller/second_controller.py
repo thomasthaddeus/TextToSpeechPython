@@ -3,6 +3,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
 from app.model.scraper.pptx_scraper import PPTXScraper
+from loguru import logger
 
 
 class SecondController:
@@ -24,6 +25,7 @@ class SecondController:
         )
         if file_path:
             self.view.filePathEdit.setText(file_path)
+            logger.info("Selected PPTX file {}", file_path)
 
     def load_file(self):
         file_path = self.view.filePathEdit.text().strip()
@@ -38,6 +40,7 @@ class SecondController:
         try:
             extracted_rows = self.scraper.scrape_pptx(file_path)
         except Exception as error:
+            logger.exception("Failed to import PowerPoint file: {}", error)
             QMessageBox.critical(
                 self.view,
                 "Import Error",
@@ -57,6 +60,10 @@ class SecondController:
             row[2] or row[1] for row in extracted_rows if row[1] or row[2]
         )
         self.view.previewTextEdit.setPlainText("\n\n---\n\n".join(preview_chunks))
+        logger.info(
+            "Loaded PowerPoint import preview with {} slides.",
+            len(extracted_rows),
+        )
 
     def import_text(self):
         if not self.imported_text.strip():
@@ -69,3 +76,4 @@ class SecondController:
 
         self.view.textImported.emit(self.imported_text)
         self.view.accept()
+        logger.info("Imported PowerPoint text into the main window.")

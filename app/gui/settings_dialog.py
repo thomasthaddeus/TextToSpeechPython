@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
+from app.model.api.azure_tts_api import AzureTTSAPI
 from app.model.app_settings import AppSettings
 from app.model.ssml.ssml_config import SSMLConfig
 
@@ -45,6 +46,14 @@ class SettingsDialog(QDialog):
         self.voice_combo = QComboBox(self)
         self.voice_combo.addItems(self.voice_config.list_voices())
         form_layout.addRow("Voice", self.voice_combo)
+
+        self.azure_key_edit = QLineEdit(self)
+        self.azure_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        form_layout.addRow("Azure Key", self.azure_key_edit)
+
+        self.azure_region_edit = QLineEdit(self)
+        self.azure_region_edit.setPlaceholderText("eastus")
+        form_layout.addRow("Azure Region", self.azure_region_edit)
 
         self.rate_combo = QComboBox(self)
         self.rate_combo.addItems(self.RATE_OPTIONS)
@@ -79,6 +88,20 @@ class SettingsDialog(QDialog):
         )
         form_layout.addRow("", self.auto_clean_checkbox)
 
+        self.logging_checkbox = QCheckBox(
+            "Enable application logging",
+            self,
+        )
+        form_layout.addRow("", self.logging_checkbox)
+
+        connection_row = QHBoxLayout()
+        self.test_connection_button = QPushButton("Test Connection", self)
+        self.connection_status_label = QLabel("Not tested", self)
+        self.test_connection_button.clicked.connect(self._test_connection)
+        connection_row.addWidget(self.test_connection_button)
+        connection_row.addWidget(self.connection_status_label)
+        form_layout.addRow("Azure Status", connection_row)
+
         main_layout.addLayout(form_layout)
 
         button_row = QHBoxLayout()
@@ -93,11 +116,14 @@ class SettingsDialog(QDialog):
 
     def _load_settings(self):
         self.voice_combo.setCurrentText(self.settings.voice)
+        self.azure_key_edit.setText(self.settings.azure_key)
+        self.azure_region_edit.setText(self.settings.azure_region)
         self.rate_combo.setCurrentText(self.settings.speaking_rate)
         self.synthesis_volume_combo.setCurrentText(self.settings.synthesis_volume)
         self.playback_volume_slider.setValue(self.settings.playback_volume)
         self.output_dir_edit.setText(self.settings.output_dir)
         self.auto_clean_checkbox.setChecked(self.settings.auto_clean_text)
+        self.logging_checkbox.setChecked(self.settings.logging_enabled)
         self._update_playback_label(self.settings.playback_volume)
 
     def _update_playback_label(self, value):
@@ -126,6 +152,8 @@ class SettingsDialog(QDialog):
             return None
 
         self.settings.voice = self.voice_combo.currentText()
+        self.settings.azure_key = self.azure_key_edit.text().strip()
+        self.settings.azure_region = self.azure_region_edit.text().strip()
         self.settings.speaking_rate = self.rate_combo.currentText()
         self.settings.synthesis_volume = (
             self.synthesis_volume_combo.currentText()
@@ -133,8 +161,43 @@ class SettingsDialog(QDialog):
         self.settings.playback_volume = self.playback_volume_slider.value()
         self.settings.output_dir = output_dir
         self.settings.auto_clean_text = self.auto_clean_checkbox.isChecked()
+        self.settings.logging_enabled = self.logging_checkbox.isChecked()
         return self.settings
 
     def _accept_if_valid(self):
         if self.get_settings() is not None:
             self.accept()
+
+    def _test_connection(self):
+        azure_key = self.azure_key_edit.text().strip()
+        azure_region = self.azure_region_edit.text().strip()
+        if not azure_key or not azure_region:
+            QMessageBox.warning(
+                self,
+                "Missing Azure Settings",
+                "Enter both the Azure key and region before testing the connection.",
+            )
+            self.connection_status_label.setText("Missing credentials")
+            return
+
+        try:
+            client = AzureTTSAPI(azure_key, azure_region)
+            audio_data = client.get_audio_from_text("Connection test.")
+        except Exception as error:
+            QMessageBox.critical(
+                self,
+                "Connection Failed",
+                f"Unable to validate the Azure Speech configuration.\n\n{error}",
+            )
+            self.connection_status_label.setText("Connection failed")
+            return
+
+        if audio_data:
+            self.connection_status_label.setText("Connection OK")
+            QMessageBox.information(
+                self,
+                "Connection Successful",
+                "Azure Speech credentials are valid.",
+            )
+        else:
+            self.connection_status_label.setText("No audio returned")
