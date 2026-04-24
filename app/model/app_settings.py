@@ -14,6 +14,11 @@ class AppSettings:
     voice: str = "en-US-GuyNeural"
     speaking_rate: str = "medium"
     synthesis_volume: str = "medium"
+    emphasis_level: str = "none"
+    pitch: str = "default"
+    pitch_range: str = "default"
+    pause_duration: str = "none"
+    pause_position: str = "after"
     playback_volume: int = 80
     auto_clean_text: bool = True
     logging_enabled: bool = True

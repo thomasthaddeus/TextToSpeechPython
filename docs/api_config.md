@@ -1,12 +1,30 @@
-# API Config
+# Azure Configuration
 
-The current application reads Azure Speech settings from a local configuration
-file using `configparser`. The project uses `.env` as the default filename, but
-the contents are INI-style rather than shell-style environment variable lines.
+The current desktop application supports two Azure Speech configuration paths:
 
-## Expected Format
+1. In-app settings from `Tools > Settings`
+2. A local `.env` file in INI format
 
-Create a local `.env` file with the following structure:
+## Recommended Path
+
+Use the in-app settings dialog for day-to-day use. The GUI supports:
+
+- Azure key
+- Azure region
+- connection testing
+
+These values are persisted to:
+
+```text
+data/dynamic/app_settings.json
+```
+
+## `.env` Fallback
+
+If the settings dialog does not contain Azure credentials, the application falls
+back to a local `.env` file.
+
+Expected format:
 
 ```ini
 [API]
@@ -14,20 +32,26 @@ key = YOUR_AZURE_SPEECH_KEY
 region = YOUR_AZURE_REGION
 ```
 
-Both values are required.
+## Resolution Order
 
-## What the Code Reads
+When the application needs Azure credentials, it resolves them in this order:
 
-The configuration helpers support:
+1. Saved GUI settings
+2. `.env`
 
-- `get_api_key(config_file_path)` for callers that only need the key
-- `get_api_settings(config_file_path)` for callers that need both the key and
-  region
+## Startup Behavior
+
+The application no longer requires valid Azure credentials just to launch. If
+credentials are missing:
+
+- the GUI still opens
+- generation/export actions remain gated by editor state
+- synthesis attempts show setup guidance instead of crashing the app
 
 ## Notes
 
-- The `.env` file should remain local and uncommitted.
-- If you prefer a different filename, pass its path into the configuration
-  helper.
-- A future packaging pass may switch the project to a different configuration
-  strategy, but this is the format the current code expects.
+- Keep `.env` local and uncommitted.
+- GUI settings are better for interactive use because they also support a
+  connection test.
+- Azure credentials are required for preview generation, exported files, and
+  batch PPTX audio export.

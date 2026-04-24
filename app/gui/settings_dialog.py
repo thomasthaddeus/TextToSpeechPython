@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QSlider,
     QVBoxLayout,
+    QWidget,
 )
 from PyQt6.QtCore import Qt
 
@@ -30,6 +31,11 @@ class SettingsDialog(QDialog):
 
     RATE_OPTIONS = ["x-slow", "slow", "medium", "fast", "x-fast"]
     VOLUME_OPTIONS = ["silent", "x-soft", "soft", "medium", "loud", "x-loud"]
+    EMPHASIS_OPTIONS = ["none", "reduced", "moderate", "strong"]
+    PITCH_OPTIONS = ["default", "x-low", "low", "medium", "high", "x-high"]
+    RANGE_OPTIONS = ["default", "x-low", "low", "medium", "high", "x-high"]
+    PAUSE_OPTIONS = ["none", "250ms", "500ms", "1s", "2s"]
+    PAUSE_POSITION_OPTIONS = ["before", "after"]
 
     def __init__(self, settings, parent=None):
         super().__init__(parent)
@@ -62,6 +68,41 @@ class SettingsDialog(QDialog):
         self.synthesis_volume_combo = QComboBox(self)
         self.synthesis_volume_combo.addItems(self.VOLUME_OPTIONS)
         form_layout.addRow("Speech Volume", self.synthesis_volume_combo)
+
+        self.advanced_group = QCheckBox("Show advanced SSML controls", self)
+        self.advanced_group.toggled.connect(self._toggle_advanced_controls)
+        form_layout.addRow("", self.advanced_group)
+
+        self.advanced_controls_widget = QWidget(self)
+        advanced_layout = QFormLayout(self.advanced_controls_widget)
+
+        self.emphasis_combo = QComboBox(self)
+        self.emphasis_combo.addItems(self.EMPHASIS_OPTIONS)
+        advanced_layout.addRow("Emphasis", self.emphasis_combo)
+
+        self.pitch_combo = QComboBox(self)
+        self.pitch_combo.addItems(self.PITCH_OPTIONS)
+        advanced_layout.addRow("Pitch", self.pitch_combo)
+
+        self.range_combo = QComboBox(self)
+        self.range_combo.addItems(self.RANGE_OPTIONS)
+        advanced_layout.addRow("Pitch Range", self.range_combo)
+
+        self.pause_duration_combo = QComboBox(self)
+        self.pause_duration_combo.addItems(self.PAUSE_OPTIONS)
+        advanced_layout.addRow("Pause Duration", self.pause_duration_combo)
+
+        self.pause_position_combo = QComboBox(self)
+        self.pause_position_combo.addItems(self.PAUSE_POSITION_OPTIONS)
+        advanced_layout.addRow("Pause Position", self.pause_position_combo)
+
+        self.advanced_container = QLabel(self.advanced_controls_widget)
+        self.advanced_container.setText(
+            "Advanced controls shape the SSML preview and generated speech."
+        )
+        advanced_layout.addRow("", self.advanced_container)
+        self.advanced_controls_widget.hide()
+        form_layout.addRow("Advanced", self.advanced_controls_widget)
 
         playback_row = QHBoxLayout()
         self.playback_volume_slider = QSlider(Qt.Orientation.Horizontal, self)
@@ -120,10 +161,25 @@ class SettingsDialog(QDialog):
         self.azure_region_edit.setText(self.settings.azure_region)
         self.rate_combo.setCurrentText(self.settings.speaking_rate)
         self.synthesis_volume_combo.setCurrentText(self.settings.synthesis_volume)
+        self.emphasis_combo.setCurrentText(self.settings.emphasis_level)
+        self.pitch_combo.setCurrentText(self.settings.pitch)
+        self.range_combo.setCurrentText(self.settings.pitch_range)
+        self.pause_duration_combo.setCurrentText(self.settings.pause_duration)
+        self.pause_position_combo.setCurrentText(self.settings.pause_position)
         self.playback_volume_slider.setValue(self.settings.playback_volume)
         self.output_dir_edit.setText(self.settings.output_dir)
         self.auto_clean_checkbox.setChecked(self.settings.auto_clean_text)
         self.logging_checkbox.setChecked(self.settings.logging_enabled)
+        show_advanced = any(
+            (
+                self.settings.emphasis_level != "none",
+                self.settings.pitch != "default",
+                self.settings.pitch_range != "default",
+                self.settings.pause_duration != "none",
+            )
+        )
+        self.advanced_group.setChecked(show_advanced)
+        self._toggle_advanced_controls(show_advanced)
         self._update_playback_label(self.settings.playback_volume)
 
     def _update_playback_label(self, value):
@@ -158,6 +214,11 @@ class SettingsDialog(QDialog):
         self.settings.synthesis_volume = (
             self.synthesis_volume_combo.currentText()
         )
+        self.settings.emphasis_level = self.emphasis_combo.currentText()
+        self.settings.pitch = self.pitch_combo.currentText()
+        self.settings.pitch_range = self.range_combo.currentText()
+        self.settings.pause_duration = self.pause_duration_combo.currentText()
+        self.settings.pause_position = self.pause_position_combo.currentText()
         self.settings.playback_volume = self.playback_volume_slider.value()
         self.settings.output_dir = output_dir
         self.settings.auto_clean_text = self.auto_clean_checkbox.isChecked()
@@ -201,3 +262,6 @@ class SettingsDialog(QDialog):
             )
         else:
             self.connection_status_label.setText("No audio returned")
+
+    def _toggle_advanced_controls(self, enabled):
+        self.advanced_controls_widget.setVisible(enabled)

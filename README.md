@@ -1,37 +1,62 @@
-# Text-to-Speech Python Program
+# TextToSpeechPython
 
-## Description
+## Overview
 
-This repository contains a PyQt-based desktop application for experimenting
-with text-to-speech workflows and SSML helpers for Azure Speech.
+`TextToSpeechPython` is a PyQt6 desktop application for building Azure Speech
+text-to-speech workflows around plain text, SSML previewing, and PowerPoint
+imports.
 
-The codebase currently includes:
+The current application supports:
 
-- a main application window with text editing, SSML preview, and playback/export actions
-- a settings dialog for voice, speech rate, synthesis volume, playback volume, and output directory
-- a settings dialog for voice, speech rate, synthesis volume, playback volume, output directory, and logging
-- a PowerPoint import dialog for bringing slide notes into the editor
-- helpers for converting plain text into SSML
-- Azure Speech client wrappers for synthesizing text and SSML
-- PowerPoint scraping utilities for extracting slide text and notes
-- text-cleaning helpers for preparing imported or pasted content for speech
+- editing or pasting source text in the main window
+- live SSML preview generation
+- Azure Speech synthesis to preview or exported `.mp3` files
+- a settings dialog for Azure credentials, voice, output directory, logging,
+  playback volume, and advanced SSML controls
+- PowerPoint (`.pptx`) import with structured slide/notes preview
+- selective PPTX import into the main editor
+- batch export of selected PPTX rows to one audio file per slide item
+- recent audio history in the main window
+
+## Requirements
+
+- Python 3.11+
+- Poetry
+- Azure Speech resource with a valid key and region
 
 ## Installation
 
-Poetry is now the recommended way to manage this project.
-
-Install dependencies with:
+From the project root:
 
 ```bash
 poetry install
 ```
 
-## Configuration
+## Running The App
 
-You can configure Azure Speech in either of two ways:
+You can launch the application in either of these ways:
 
-1. From `Tools > Settings` inside the application.
-2. By creating a local `.env` file in INI format:
+```bash
+poetry run python -m app.main
+```
+
+or:
+
+```bash
+poetry run tts-app
+```
+
+## Azure Configuration
+
+The app can start without Azure configured, but generation and export will stay
+unavailable until credentials are provided.
+
+You can configure Azure Speech in either of these ways:
+
+1. In the GUI via `Tools > Settings`
+2. With a local `.env` file in INI format
+
+Example `.env`:
 
 ```ini
 [API]
@@ -39,45 +64,100 @@ key = YOUR_AZURE_SPEECH_KEY
 region = YOUR_AZURE_REGION
 ```
 
-The `.env` file is intended for local development and should not be committed.
-If Azure Speech is not configured yet, the GUI now starts in a degraded state
-so you can open the settings dialog and complete setup there.
+GUI settings take precedence over `.env` when both are present.
 
-## Usage
+## Main Workflow
 
-Launch the desktop application from the project root:
+1. Paste text into the editor, or import slides from `Import PPTX`.
+2. Open `Tools > Settings` to configure Azure, voice, output directory, and SSML options.
+3. Review the generated SSML preview.
+4. Use `Generate & Play` for a temporary preview file or `Generate File` to export an `.mp3`.
+5. Review recent generated files in the `Recent Audio` panel.
 
-```bash
-poetry run python -m app.main
-```
+## Advanced SSML Controls
 
-or use the Poetry script entrypoint:
+The settings dialog includes an expandable advanced SSML section. The current
+GUI exposes:
 
-```bash
-poetry run tts-app
-```
+- emphasis
+- pitch
+- pitch range
+- pause duration
+- pause position
 
-Once the app is running, the main workflow is:
+These controls are applied to both the SSML preview and generated audio.
 
-1. Paste or import text into the editor.
-2. Adjust Azure, voice, and output settings from `Tools > Settings`.
-3. Preview the generated SSML.
-4. Generate audio for playback or export it to an `.mp3` file.
+## PowerPoint Workflow
 
-If logging is enabled from `Tools > Settings`, application logs are written to:
+`Import PPTX` opens a structured import dialog with:
+
+- a row-based preview of slide number, slide text, and notes
+- multi-row selection
+- content modes:
+  - `Prefer Notes`
+  - `Notes Only`
+  - `Slide Text Only`
+  - `Combine Slide Text and Notes`
+
+From that dialog you can:
+
+- import the selected rows into the main editor
+- batch export the selected rows to one `.mp3` per item
+
+## Logging
+
+If logging is enabled in `Tools > Settings`, the application writes logs to:
 
 ```text
 data/dynamic/logs/app.log
 ```
 
-with timestamps formatted as `YYYYMMDDHHmmss`.
+Log timestamps use:
 
-## Status
+```text
+YYYYMMDDHHmmss
+```
 
-The project is still being cleaned up and stabilized. The code now uses
-package-qualified imports, committed in-repo UI modules, and a Poetry-based
-project manifest, but additional work is still planned around tests and runtime
-polish.
+## Runtime Data
+
+The app writes runtime artifacts under `data/dynamic/`, including:
+
+- `app_settings.json` for persisted UI settings
+- `audio_history.json` for recent generated audio history
+- `audio/` for default exported audio output
+- `logs/` for application logs
+- `tmp/` for temporary test and scratch artifacts that should not be synced
+
+## Current Behavior Notes
+
+- The app disables generation-related actions until the editor contains text.
+- If multimedia playback support is unavailable in the environment, preview
+  generation still works, but playback controls are disabled and the UI relabels
+  the preview action accordingly.
+- Preview audio files are temporary and cleaned up automatically.
+
+## Project Layout
+
+- [app/main.py](D:/Projects/TextToSpeechPython/app/main.py): application entrypoint
+- [app/gui](D:/Projects/TextToSpeechPython/app/gui): in-repo Qt UI modules and dialogs
+- [app/controller](D:/Projects/TextToSpeechPython/app/controller): GUI orchestration and workflow logic
+- [app/model](D:/Projects/TextToSpeechPython/app/model): settings, Azure wrappers, SSML helpers, and scrapers
+- [docs](D:/Projects/TextToSpeechPython/docs): supporting documentation
+- [tests](D:/Projects/TextToSpeechPython/tests): focused regression tests
+
+## Verification
+
+The repo currently includes focused regression tests for:
+
+- SSML escaping and advanced SSML markup
+- audio history persistence
+- PPTX import content-mode resolution
+
+Run them with:
+
+```bash
+python -m unittest tests.test_main_controller_ssml tests.test_main_controller_history tests.test_second_controller_import
+```
 
 ## License
 

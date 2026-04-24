@@ -5,6 +5,7 @@ from app.gui.ui_second_window import Ui_Dialog
 
 class SecondApp(QDialog, Ui_Dialog):
     textImported = pyqtSignal(str)
+    batchRequested = pyqtSignal(object)
 
     def __init__(self, parent=None):
         super(SecondApp, self).__init__(parent)

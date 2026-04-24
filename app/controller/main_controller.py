@@ -80,7 +80,15 @@ class MainController:
         self.view.actionSettings.triggered.connect(self.open_settings)
         self.view.actionOpenScraper.triggered.connect(self.open_second_window)
         self.view.actionAbout.triggered.connect(self.show_about)
-        self.view.textEdit.textChanged.connect(self.update_ssml_preview)
+        self.view.textEdit.textChanged.connect(self._handle_editor_text_changed)
+
+    def _sanitize_batch_name(self, value):
+        sanitized = "".join(
+            character if character.isalnum() or character in ("-", "_") else "_"
+            for character in value.strip().lower()
+        )
+        sanitized = sanitized.strip("_")
+        return sanitized or "item"
 
     def _refresh_ui_state(self):
         self._updating_ui_state = True
@@ -98,6 +106,7 @@ class MainController:
         self.view.playbackVolumeValueLabel.setText(
             f"{self.settings.playback_volume}%"
         )
+        self._refresh_action_states()
         azure_key, azure_region = self._resolve_azure_credentials()
         if azure_key and azure_region:
             self.view.statusbar.showMessage("Ready")
@@ -109,6 +118,75 @@ class MainController:
 
     def _current_editor_text(self):
         return self.view.textEdit.toPlainText().strip()
+
+    def _set_inline_hint(self, text):
+        self.view.actionHintLabel.setText(text)
+
+    def _refresh_action_states(self):
+        has_text = bool(self._current_editor_text())
+        multimedia_available = (
+            self.media_player is not None and self.audio_output is not None
+        )
+        has_preview_audio = bool(self.preview_audio_path)
+
+        self.view.previewButton.setEnabled(has_text)
+        self.view.cleanTextButton.setEnabled(has_text)
+        self.view.playButton.setEnabled(has_text)
+        self.view.generateButton.setEnabled(has_text)
+        self.view.actionExportAudio.setEnabled(has_text)
+        self.view.stopButton.setEnabled(multimedia_available and has_preview_audio)
+        self.view.playbackVolumeSlider.setEnabled(multimedia_available)
+
+        if multimedia_available:
+            self.view.playButton.setText("Generate && Play")
+            self.view.playButton.setToolTip(
+                "Generate speech and play it immediately."
+            )
+        else:
+            self.view.playButton.setText("Generate Preview File")
+            self.view.playButton.setToolTip(
+                "Generate a preview file. Live playback is unavailable in this environment."
+            )
+
+        if not has_text:
+            self._set_inline_hint(
+                "Type or import text to enable preview and generation actions."
+            )
+            return
+
+        advanced_chunks = []
+        if self.settings.emphasis_level != "none":
+            advanced_chunks.append(f"emphasis={self.settings.emphasis_level}")
+        if self.settings.pitch != "default":
+            advanced_chunks.append(f"pitch={self.settings.pitch}")
+        if self.settings.pitch_range != "default":
+            advanced_chunks.append(f"range={self.settings.pitch_range}")
+        if self.settings.pause_duration != "none":
+            advanced_chunks.append(
+                f"pause={self.settings.pause_duration} ({self.settings.pause_position})"
+            )
+        advanced_summary = (
+            ", ".join(advanced_chunks)
+            if advanced_chunks
+            else "default advanced SSML settings"
+        )
+
+        if not multimedia_available:
+            self._set_inline_hint(
+                f"Text is ready and using {advanced_summary}. Preview generation works, but playback controls are disabled because multimedia support is unavailable."
+            )
+        elif has_preview_audio:
+            self._set_inline_hint(
+                f"Preview audio is ready. Current SSML uses {advanced_summary}."
+            )
+        else:
+            self._set_inline_hint(
+                f"Text is ready. Current SSML uses {advanced_summary}."
+            )
+
+    def _handle_editor_text_changed(self):
+        self._refresh_action_states()
+        self.update_ssml_preview()
 
     def _load_audio_history(self):
         if not self.AUDIO_HISTORY_PATH.exists():
@@ -215,9 +293,31 @@ class MainController:
         working_text = escape(working_text)
 
         converter = TextToSSML(voice_name=self.settings.voice)
+        ssml_content = working_text
+
+        if self.settings.pause_duration != "none":
+            pause_tag = f'<break time="{self.settings.pause_duration}"/>'
+            if self.settings.pause_position == "before":
+                ssml_content = f"{pause_tag}{ssml_content}"
+            else:
+                ssml_content = f"{ssml_content}{pause_tag}"
+
+        if self.settings.emphasis_level != "none":
+            ssml_content = (
+                f'<emphasis level="{self.settings.emphasis_level}">{ssml_content}</emphasis>'
+            )
+
+        prosody_attributes = [
+            f'rate="{self.settings.speaking_rate}"',
+            f'volume="{self.settings.synthesis_volume}"',
+        ]
+        if self.settings.pitch != "default":
+            prosody_attributes.append(f'pitch="{self.settings.pitch}"')
+        if self.settings.pitch_range != "default":
+            prosody_attributes.append(f'range="{self.settings.pitch_range}"')
+
         prosody_text = (
-            f'<prosody rate="{self.settings.speaking_rate}" '
-            f'volume="{self.settings.synthesis_volume}">{working_text}</prosody>'
+            f"<prosody {' '.join(prosody_attributes)}>{ssml_content}</prosody>"
         )
         return converter.convert(prosody_text)
 
@@ -225,10 +325,12 @@ class MainController:
         text = self._current_editor_text()
         if not text:
             self.view.ssmlPreview.clear()
+            self._refresh_action_states()
             self.view.statusbar.showMessage("Enter text to preview SSML.")
             return
 
         self.view.ssmlPreview.setPlainText(self._build_ssml(text))
+        self._refresh_action_states()
         self.view.statusbar.showMessage("SSML preview updated.")
         logger.info("SSML preview updated.")
 
@@ -257,6 +359,9 @@ class MainController:
             )
             return None
 
+        return self._synthesize_text(text)
+
+    def _synthesize_text(self, text):
         tts_processor = self._ensure_tts_processor()
         if tts_processor is None:
             QMessageBox.warning(
@@ -274,7 +379,7 @@ class MainController:
             return None
 
         try:
-            audio_data = tts_processor.text_to_speech(
+            return tts_processor.text_to_speech(
                 self._build_ssml(text),
                 use_ssml=True,
             )
@@ -287,8 +392,6 @@ class MainController:
             )
             self.view.statusbar.showMessage("Speech generation failed.")
             return None
-
-        return audio_data
 
     def generate_and_play_audio(self):
         audio_data = self.generate_audio_bytes()
@@ -306,6 +409,7 @@ class MainController:
             self.latest_audio_path = temp_file.name
 
         self._record_audio_history(self.preview_audio_path, "preview")
+        self._refresh_action_states()
 
         if self.media_player is None or self.audio_output is None:
             QMessageBox.information(
@@ -330,6 +434,7 @@ class MainController:
     def stop_audio(self):
         if self.media_player is not None:
             self.media_player.stop()
+        self._refresh_action_states()
         self.view.statusbar.showMessage("Playback stopped.")
         logger.info("Playback stopped.")
 
@@ -358,6 +463,80 @@ class MainController:
         self.view.statusbar.showMessage(f"Saved audio to {file_path}")
         logger.info("Saved audio export to {}", file_path)
 
+    def batch_export_imported_rows(self, rows):
+        if not rows:
+            QMessageBox.information(
+                self.view,
+                "Nothing To Export",
+                "Select one or more imported slide rows before batch exporting.",
+            )
+            return
+
+        output_dir = Path(self.settings.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        selected_dir = QFileDialog.getExistingDirectory(
+            self.view,
+            "Choose Batch Export Folder",
+            str(output_dir),
+        )
+        if not selected_dir:
+            self.view.statusbar.showMessage("Batch export canceled.")
+            return
+
+        selected_path = Path(selected_dir)
+        exported_files = []
+        for row in rows:
+            resolved_text = (row.get("resolved_text") or "").strip()
+            if not resolved_text:
+                continue
+
+            audio_data = self._synthesize_text(resolved_text)
+            if audio_data is None:
+                if exported_files:
+                    self.view.statusbar.showMessage(
+                        f"Batch export stopped after {len(exported_files)} files."
+                    )
+                return
+
+            mode_name = self._sanitize_batch_name(
+                row.get("content_mode", "prefer_notes")
+            )
+            file_name = (
+                f"slide_{int(row.get('slide_number', 0)):02d}_{mode_name}.mp3"
+            )
+            file_path = selected_path / file_name
+            with open(file_path, "wb") as file:
+                file.write(audio_data)
+
+            exported_files.append(file_path)
+            self.latest_audio_path = str(file_path)
+            self._record_audio_history(file_path, "export")
+
+        if not exported_files:
+            QMessageBox.information(
+                self.view,
+                "No Content",
+                "The selected rows did not contain exportable content.",
+            )
+            return
+
+        self.view.statusbar.showMessage(
+            f"Batch exported {len(exported_files)} audio files to {selected_path}"
+        )
+        QMessageBox.information(
+            self.view,
+            "Batch Export Complete",
+            (
+                f"Created {len(exported_files)} audio files in:\n\n"
+                f"{selected_path}"
+            ),
+        )
+        logger.info(
+            "Batch exported {} PowerPoint audio files to {}",
+            len(exported_files),
+            selected_path,
+        )
+
     def update_playback_volume(self, value):
         self.settings.playback_volume = value
         self.view.playbackVolumeValueLabel.setText(f"{value}%")
@@ -379,6 +558,7 @@ class MainController:
 
         with open(file_path, "r", encoding="utf-8") as file:
             self.view.textEdit.setPlainText(file.read())
+        self._refresh_action_states()
         self.view.statusbar.showMessage(f"Loaded text from {file_path}")
         logger.info("Loaded text file {}", file_path)
 
@@ -421,11 +601,15 @@ class MainController:
         self.second_window = SecondApp(self.view)
         self.second_controller = SecondController(self.second_window)
         self.second_window.textImported.connect(self.import_text_from_scraper)
+        self.second_window.batchRequested.connect(
+            self.batch_export_imported_rows
+        )
         self.second_window.show()
         logger.info("Opened PPTX import dialog.")
 
     def import_text_from_scraper(self, text):
         self.view.textEdit.setPlainText(text)
+        self._refresh_action_states()
         self.view.statusbar.showMessage("Imported text from PowerPoint.")
         logger.info("Imported text from PowerPoint into main editor.")
 
@@ -453,6 +637,7 @@ class MainController:
             logger.info("Removed preview audio file {}", preview_path)
 
         self.preview_audio_path = None
+        self._refresh_action_states()
 
     def shutdown(self):
         self._cleanup_preview_audio()
