@@ -163,3 +163,7 @@ cython_debug/
 app/.conf/pyproject.toml
 scripts/
 notes.*
+logs/
+tmp*/
+data/dynamic/tmp/*
+!data/dynamic/tmp/.gitkeep

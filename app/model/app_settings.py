@@ -16,6 +16,9 @@ class AppSettings:
     synthesis_volume: str = "medium"
     playback_volume: int = 80
     auto_clean_text: bool = True
+    logging_enabled: bool = True
+    azure_key: str = ""
+    azure_region: str = ""
     output_dir: str = "data/dynamic/audio"
 
     @classmethod

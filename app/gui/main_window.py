@@ -4,6 +4,7 @@ _summary_
 _extended_summary_
 """
 
+from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import QMainWindow
 from app.controller.main_controller import MainController
 from app.gui.ui_main_window import Ui_MainWindow
@@ -14,3 +15,7 @@ class MainApp(QMainWindow, Ui_MainWindow):
         super().__init__()
         self.setupUi(self)
         self.controller = MainController(self)
+
+    def closeEvent(self, event: QCloseEvent):
+        self.controller.shutdown()
+        super().closeEvent(event)
