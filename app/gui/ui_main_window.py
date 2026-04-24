@@ -73,6 +73,13 @@ class Ui_MainWindow:
             action_row.addWidget(button)
         controls_layout.addWidget(self.audioControlsGroup, 0, 0, 1, 2)
 
+        self.actionHintLabel = QLabel(
+            "Type or import text to enable preview and generation actions.",
+            central_widget,
+        )
+        self.actionHintLabel.setWordWrap(True)
+        controls_layout.addWidget(self.actionHintLabel, 1, 0, 1, 2)
+
         self.statusGroup = QGroupBox("Current Output", central_widget)
         status_layout = QHBoxLayout(self.statusGroup)
         self.voiceSummaryLabel = QLabel("Voice: en-US-GuyNeural", self.statusGroup)
@@ -86,7 +93,7 @@ class Ui_MainWindow:
             self.outputSummaryLabel,
         ):
             status_layout.addWidget(label)
-        controls_layout.addWidget(self.statusGroup, 1, 0, 1, 2)
+        controls_layout.addWidget(self.statusGroup, 2, 0, 1, 2)
 
         self.playbackGroup = QGroupBox("Playback Volume", central_widget)
         playback_layout = QHBoxLayout(self.playbackGroup)
@@ -96,7 +103,7 @@ class Ui_MainWindow:
         self.playbackVolumeValueLabel = QLabel("80%", self.playbackGroup)
         playback_layout.addWidget(self.playbackVolumeSlider)
         playback_layout.addWidget(self.playbackVolumeValueLabel)
-        controls_layout.addWidget(self.playbackGroup, 2, 0, 1, 2)
+        controls_layout.addWidget(self.playbackGroup, 3, 0, 1, 2)
 
         self.historyGroup = QGroupBox("Recent Audio", central_widget)
         history_layout = QVBoxLayout(self.historyGroup)
@@ -106,7 +113,7 @@ class Ui_MainWindow:
             QListWidget.SelectionMode.NoSelection
         )
         history_layout.addWidget(self.historyList)
-        controls_layout.addWidget(self.historyGroup, 3, 0, 1, 2)
+        controls_layout.addWidget(self.historyGroup, 4, 0, 1, 2)
 
         root_layout.addLayout(controls_layout)
 

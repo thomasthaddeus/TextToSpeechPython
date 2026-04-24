@@ -167,3 +167,4 @@ logs/
 tmp*/
 data/dynamic/tmp/*
 !data/dynamic/tmp/.gitkeep
+audio/

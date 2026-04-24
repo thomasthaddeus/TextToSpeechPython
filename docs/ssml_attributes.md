@@ -1,5 +1,20 @@
 # SSML Attributes
 
+This file is a reference sheet for Azure SSML capabilities that are relevant to
+the project.
+
+The current GUI directly exposes only a subset of these attributes:
+
+- `rate`
+- `volume`
+- `pitch`
+- `range`
+- `break`
+- `emphasis`
+
+The remaining attributes in this document are useful reference material for
+future GUI expansion or manual SSML experimentation.
+
 | Style                             | Description                                                                                                                                                                                                     |
 |-----------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | style="advertisement_upbeat"      | Expresses an excited and high-energy tone for promoting a product or service.                                                                                                                                   |
