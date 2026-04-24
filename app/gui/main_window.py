@@ -13,5 +13,4 @@ class MainApp(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
-        self.second_window = None
         self.controller = MainController(self)
