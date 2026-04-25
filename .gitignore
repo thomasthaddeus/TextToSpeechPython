@@ -167,4 +167,9 @@ logs/
 tmp*/
 data/dynamic/tmp/*
 !data/dynamic/tmp/.gitkeep
-audio/
+data/dynamic/app_settings.json
+data/dynamic/audio_history.json
+data/dynamic/logs/*
+data/dynamic/audio/*
+!data/dynamic/logs/.gitkeep
+!data/dynamic/audio/.gitkeep

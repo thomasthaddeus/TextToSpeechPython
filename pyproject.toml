@@ -1,17 +1,22 @@
 [project]
 name = "texttospeechpython"
-version = "0.1.0"
+version = "0.1.1"
 description = "PyQt desktop app for experimenting with Azure text-to-speech and SSML workflows."
 readme = "README.md"
 authors = [{ name = "Thaddeus Maximus" }]
 requires-python = ">=3.11,<4.0"
 dependencies = [
     "azure-cognitiveservices-speech",
+    "beautifulsoup4",
+    "ebooklib",
     "loguru",
     "pandas",
     "pillow",
+    "pypdf",
     "pyqt6",
+    "python-docx",
     "python-pptx",
+    "striprtf",
     "xlsxwriter",
 ]
 
@@ -24,11 +29,16 @@ packages = [{ include = "app" }]
 [tool.poetry.dependencies]
 python = ">=3.11,<4.0"
 azure-cognitiveservices-speech = "*"
+beautifulsoup4 = "*"
+ebooklib = "*"
 loguru = "*"
 pandas = "*"
 pillow = "*"
+pypdf = "*"
 pyqt6 = "*"
+python-docx = "*"
 python-pptx = "*"
+striprtf = "*"
 xlsxwriter = "*"
 
 [build-system]

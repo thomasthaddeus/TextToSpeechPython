@@ -17,40 +17,43 @@ class ViewStub:
 
 
 class SecondControllerImportTests(unittest.TestCase):
-    def _controller(self, mode_text="Prefer Notes"):
+    def _controller(self, mode_text="Prefer Secondary Text"):
         controller = SecondController.__new__(SecondController)
         controller.view = ViewStub(mode_text)
         return controller
 
-    def test_build_import_payload_prefers_notes_with_slide_fallback(self):
-        controller = self._controller("Prefer Notes")
+    def test_build_import_payload_prefers_secondary_with_primary_fallback(self):
+        controller = self._controller("Prefer Secondary Text")
         selected_rows = [
             {
-                "slide_number": 1,
-                "slide_text": "Slide summary",
-                "notes_text": "Speaker notes",
+                "item_number": 1,
+                "title": "Item 1",
+                "primary_text": "Primary summary",
+                "secondary_text": "Secondary notes",
             },
             {
-                "slide_number": 2,
-                "slide_text": "Only slide text",
-                "notes_text": "",
+                "item_number": 2,
+                "title": "Item 2",
+                "primary_text": "Only primary text",
+                "secondary_text": "",
             },
         ]
 
         payload_rows, imported_text = controller._build_import_payload(selected_rows)
 
         self.assertEqual(len(payload_rows), 2)
-        self.assertEqual(payload_rows[0]["resolved_text"], "Speaker notes")
-        self.assertEqual(payload_rows[1]["resolved_text"], "Only slide text")
-        self.assertEqual(imported_text, "Speaker notes\n\nOnly slide text")
+        self.assertEqual(payload_rows[0]["resolved_text"], "Secondary notes")
+        self.assertEqual(payload_rows[1]["resolved_text"], "Only primary text")
+        self.assertEqual(imported_text, "Secondary notes\n\nOnly primary text")
 
-    def test_build_import_payload_combines_slide_text_and_notes(self):
-        controller = self._controller("Combine Slide Text and Notes")
+    def test_build_import_payload_combines_primary_and_secondary_text(self):
+        controller = self._controller("Combine Primary and Secondary Text")
         selected_rows = [
             {
-                "slide_number": 3,
-                "slide_text": "Agenda",
-                "notes_text": "Longer narration",
+                "item_number": 3,
+                "title": "Chapter 3",
+                "primary_text": "Agenda",
+                "secondary_text": "Longer narration",
             }
         ]
 

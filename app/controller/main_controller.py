@@ -501,8 +501,11 @@ class MainController:
             mode_name = self._sanitize_batch_name(
                 row.get("content_mode", "prefer_notes")
             )
+            title_name = self._sanitize_batch_name(
+                row.get("title", f"item_{row.get('item_number', 0)}")
+            )
             file_name = (
-                f"slide_{int(row.get('slide_number', 0)):02d}_{mode_name}.mp3"
+                f"item_{int(row.get('item_number', 0)):02d}_{title_name}_{mode_name}.mp3"
             )
             file_path = selected_path / file_name
             with open(file_path, "wb") as file:
@@ -532,7 +535,7 @@ class MainController:
             ),
         )
         logger.info(
-            "Batch exported {} PowerPoint audio files to {}",
+            "Batch exported {} document audio files to {}",
             len(exported_files),
             selected_path,
         )
@@ -605,13 +608,13 @@ class MainController:
             self.batch_export_imported_rows
         )
         self.second_window.show()
-        logger.info("Opened PPTX import dialog.")
+        logger.info("Opened document import dialog.")
 
     def import_text_from_scraper(self, text):
         self.view.textEdit.setPlainText(text)
         self._refresh_action_states()
-        self.view.statusbar.showMessage("Imported text from PowerPoint.")
-        logger.info("Imported text from PowerPoint into main editor.")
+        self.view.statusbar.showMessage("Imported text from document.")
+        logger.info("Imported text from document into main editor.")
 
     def show_about(self):
         QMessageBox.information(
@@ -619,7 +622,7 @@ class MainController:
             "About Text To Speech",
             (
                 "Text To Speech is a PyQt desktop app for experimenting with "
-                "Azure speech synthesis, SSML previewing, and PowerPoint note imports."
+                "Azure speech synthesis, SSML previewing, and multi-format document imports."
             ),
         )
 

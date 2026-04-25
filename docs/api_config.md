@@ -54,4 +54,4 @@ credentials are missing:
 - GUI settings are better for interactive use because they also support a
   connection test.
 - Azure credentials are required for preview generation, exported files, and
-  batch PPTX audio export.
+  batch document audio export.

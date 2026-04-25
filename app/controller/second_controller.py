@@ -4,21 +4,22 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
 from PyQt6.QtWidgets import QTableWidgetItem
 
-from app.model.scraper.pptx_scraper import PPTXScraper
+from app.model.scraper.document_scraper import DocumentScraper
 from loguru import logger
 
 
 class SecondController:
     CONTENT_MODE_MAP = {
-        "Prefer Notes": "prefer_notes",
-        "Notes Only": "notes_only",
-        "Slide Text Only": "slide_text_only",
+        "Prefer Secondary Text": "prefer_notes",
+        "Secondary Text Only": "notes_only",
+        "Primary Text Only": "slide_text_only",
         "Combine Slide Text and Notes": "combine",
+        "Combine Primary and Secondary Text": "combine",
     }
 
     def __init__(self, view):
         self.view = view
-        self.scraper = PPTXScraper()
+        self.scraper = DocumentScraper()
         self.import_rows = []
         self.view.browseButton.clicked.connect(self.choose_file)
         self.view.loadButton.clicked.connect(self.load_file)
@@ -39,17 +40,17 @@ class SecondController:
         return selected
 
     def _resolve_text_for_row(self, row, content_mode):
-        slide_text = (row.get("slide_text") or "").strip()
-        notes_text = (row.get("notes_text") or "").strip()
+        primary_text = (row.get("primary_text") or "").strip()
+        secondary_text = (row.get("secondary_text") or "").strip()
 
         if content_mode == "notes_only":
-            return notes_text
+            return secondary_text
         if content_mode == "slide_text_only":
-            return slide_text
+            return primary_text
         if content_mode == "combine":
-            parts = [part for part in (slide_text, notes_text) if part]
+            parts = [part for part in (primary_text, secondary_text) if part]
             return "\n\n".join(parts)
-        return notes_text or slide_text
+        return secondary_text or primary_text
 
     def _build_import_payload(self, selected_rows):
         content_mode = self.CONTENT_MODE_MAP[
@@ -74,26 +75,27 @@ class SecondController:
     def _populate_preview_table(self):
         self.view.previewTable.setRowCount(len(self.import_rows))
         for row_index, row in enumerate(self.import_rows):
-            slide_item = QTableWidgetItem(str(row["slide_number"]))
-            slide_item.setData(Qt.ItemDataRole.UserRole, row)
-            slide_text_item = QTableWidgetItem(row["slide_text"] or "[empty]")
-            notes_item = QTableWidgetItem(row["notes_text"] or "[empty]")
-            self.view.previewTable.setItem(row_index, 0, slide_item)
-            self.view.previewTable.setItem(row_index, 1, slide_text_item)
-            self.view.previewTable.setItem(row_index, 2, notes_item)
+            item_label = row.get("title") or f'Item {row["item_number"]}'
+            item_cell = QTableWidgetItem(item_label)
+            item_cell.setData(Qt.ItemDataRole.UserRole, row)
+            primary_cell = QTableWidgetItem(row["primary_text"] or "[empty]")
+            secondary_cell = QTableWidgetItem(row["secondary_text"] or "[empty]")
+            self.view.previewTable.setItem(row_index, 0, item_cell)
+            self.view.previewTable.setItem(row_index, 1, primary_cell)
+            self.view.previewTable.setItem(row_index, 2, secondary_cell)
 
         self.view.previewTable.resizeColumnsToContents()
 
     def choose_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self.view,
-            "Choose PowerPoint File",
+            "Choose Document File",
             str(Path.cwd()),
-            "PowerPoint Files (*.pptx)",
+            self.scraper.SUPPORTED_FILTER,
         )
         if file_path:
             self.view.filePathEdit.setText(file_path)
-            logger.info("Selected PPTX file {}", file_path)
+            logger.info("Selected document file {}", file_path)
 
     def load_file(self):
         file_path = self.view.filePathEdit.text().strip()
@@ -101,34 +103,27 @@ class SecondController:
             QMessageBox.warning(
                 self.view,
                 "Missing File",
-                "Choose a PowerPoint file before loading.",
+                "Choose a document file before loading.",
             )
             return
 
         try:
-            extracted_rows = self.scraper.scrape_pptx(file_path)
+            extracted_rows = self.scraper.scrape_file(file_path)
         except Exception as error:
-            logger.exception("Failed to import PowerPoint file: {}", error)
+            logger.exception("Failed to import document file: {}", error)
             QMessageBox.critical(
                 self.view,
                 "Import Error",
-                f"Unable to read the PowerPoint file.\n\n{error}",
+                f"Unable to read the selected document.\n\n{error}",
             )
             return
 
-        self.import_rows = [
-            {
-                "slide_number": slide_number,
-                "slide_text": slide_text,
-                "notes_text": notes_text,
-            }
-            for slide_number, slide_text, notes_text in extracted_rows
-        ]
+        self.import_rows = extracted_rows
         self._populate_preview_table()
         if self.import_rows:
             self.view.previewTable.selectAll()
         logger.info(
-            "Loaded PowerPoint import preview with {} slides.",
+            "Loaded document import preview with {} rows.",
             len(extracted_rows),
         )
 
@@ -138,7 +133,7 @@ class SecondController:
             QMessageBox.information(
                 self.view,
                 "Nothing To Import",
-                "Load a PowerPoint file and select at least one slide row.",
+                "Load a document file and select at least one row.",
             )
             return
 
@@ -154,7 +149,7 @@ class SecondController:
         self.view.textImported.emit(imported_text)
         self.view.accept()
         logger.info(
-            "Imported {} PowerPoint rows into the main window.",
+            "Imported {} document rows into the main window.",
             len(payload_rows),
         )
 
@@ -164,7 +159,7 @@ class SecondController:
             QMessageBox.information(
                 self.view,
                 "Nothing To Export",
-                "Load a PowerPoint file and select at least one slide row.",
+                "Load a document file and select at least one row.",
             )
             return
 
@@ -179,6 +174,6 @@ class SecondController:
 
         self.view.batchRequested.emit(payload_rows)
         logger.info(
-            "Requested batch export for {} PowerPoint rows.",
+            "Requested batch export for {} document rows.",
             len(payload_rows),
         )

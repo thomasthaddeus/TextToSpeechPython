@@ -3,8 +3,8 @@
 ## Overview
 
 `TextToSpeechPython` is a PyQt6 desktop application for building Azure Speech
-text-to-speech workflows around plain text, SSML previewing, and PowerPoint
-imports.
+text-to-speech workflows around plain text, SSML previewing, and multi-format
+document imports.
 
 The current application supports:
 
@@ -13,9 +13,10 @@ The current application supports:
 - Azure Speech synthesis to preview or exported `.mp3` files
 - a settings dialog for Azure credentials, voice, output directory, logging,
   playback volume, and advanced SSML controls
-- PowerPoint (`.pptx`) import with structured slide/notes preview
-- selective PPTX import into the main editor
-- batch export of selected PPTX rows to one audio file per slide item
+- document import for `.txt`, `.docx`, `.pdf`, `.html`, `.htm`, `.rtf`,
+  `.epub`, `.xlsx`, `.xls`, `.csv`, and `.pptx`
+- selective import of extracted document sections into the main editor
+- batch export of selected imported rows to one audio file per item
 - recent audio history in the main window
 
 ## Requirements
@@ -68,7 +69,7 @@ GUI settings take precedence over `.env` when both are present.
 
 ## Main Workflow
 
-1. Paste text into the editor, or import slides from `Import PPTX`.
+1. Paste text into the editor, or import content from `Import Document`.
 2. Open `Tools > Settings` to configure Azure, voice, output directory, and SSML options.
 3. Review the generated SSML preview.
 4. Use `Generate & Play` for a temporary preview file or `Generate File` to export an `.mp3`.
@@ -87,17 +88,17 @@ GUI exposes:
 
 These controls are applied to both the SSML preview and generated audio.
 
-## PowerPoint Workflow
+## Document Import Workflow
 
-`Import PPTX` opens a structured import dialog with:
+`Import Document` opens a structured import dialog with:
 
-- a row-based preview of slide number, slide text, and notes
+- a row-based preview of extracted document sections
 - multi-row selection
 - content modes:
-  - `Prefer Notes`
-  - `Notes Only`
-  - `Slide Text Only`
-  - `Combine Slide Text and Notes`
+  - `Prefer Secondary Text`
+  - `Secondary Text Only`
+  - `Primary Text Only`
+  - `Combine Primary and Secondary Text`
 
 From that dialog you can:
 
@@ -151,12 +152,13 @@ The repo currently includes focused regression tests for:
 
 - SSML escaping and advanced SSML markup
 - audio history persistence
-- PPTX import content-mode resolution
+- document import content-mode resolution
+- normalized document scraping for `.txt` and `.html`
 
 Run them with:
 
 ```bash
-python -m unittest tests.test_main_controller_ssml tests.test_main_controller_history tests.test_second_controller_import
+python -m unittest tests.test_main_controller_ssml tests.test_main_controller_history tests.test_second_controller_import tests.test_document_scraper
 ```
 
 ## License
