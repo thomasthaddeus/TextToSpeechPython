@@ -12,7 +12,7 @@ The main window includes:
 - a source text editor
 - a read-only SSML preview panel
 - action buttons for preview, cleaning, generation, export-related flow, and
-  PPTX import
+  document import
 - a playback volume control
 - an inline guidance label for disabled or unavailable states
 - a recent audio history panel
@@ -42,21 +42,32 @@ It also includes an advanced SSML section with:
 - pause duration
 - pause position
 
-PPTX Import Dialog
-------------------
+Document Import Dialog
+----------------------
 
-The PowerPoint import dialog now uses a structured table instead of a free-form
-text preview.
+The document import dialog uses a structured table instead of a free-form text
+preview.
 
 It provides:
 
-- slide number column
-- slide text column
-- notes column
+- item/title column
+- primary text column
+- secondary text column
 - multi-row selection
 - content-mode selection
 - import of selected rows into the main editor
 - batch export of selected rows to one audio file per item
+
+Currently supported file types include:
+
+- ``.txt``
+- ``.docx``
+- ``.pdf``
+- ``.html`` / ``.htm``
+- ``.rtf``
+- ``.epub``
+- ``.xlsx`` / ``.xls`` / ``.csv``
+- ``.pptx``
 
 Validation And Action States
 ----------------------------

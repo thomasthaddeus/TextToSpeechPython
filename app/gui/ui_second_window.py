@@ -1,4 +1,4 @@
-"""Qt widgets for the PPTX import dialog."""
+"""Qt widgets for the document import dialog."""
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -13,21 +13,23 @@ from PyQt6.QtWidgets import (
 
 class Ui_Dialog:
     """
-    UI definition for the PPTX import dialog.
+    UI definition for the document import dialog.
     """
 
     def setupUi(self, dialog):
-        dialog.setWindowTitle("Import PowerPoint Notes")
+        dialog.setWindowTitle("Import Document")
         layout = QVBoxLayout(dialog)
         self.infoLabel = QLabel(
-            "Choose a PowerPoint file and preview extracted slides and notes.",
+            "Choose a supported document file and preview extracted sections.",
             dialog,
         )
         layout.addWidget(self.infoLabel)
 
         path_row = QHBoxLayout()
         self.filePathEdit = QLineEdit(dialog)
-        self.filePathEdit.setPlaceholderText("Path to .pptx file")
+        self.filePathEdit.setPlaceholderText(
+            "Path to .txt, .docx, .pdf, .html, .rtf, .epub, .xlsx, .csv, or .pptx file"
+        )
         self.browseButton = QPushButton("Browse", dialog)
         self.loadButton = QPushButton("Load", dialog)
         path_row.addWidget(self.filePathEdit)
@@ -40,16 +42,16 @@ class Ui_Dialog:
 
         mode_row = QHBoxLayout()
         self.selectionHelpLabel = QLabel(
-            "Select slide rows and choose what to import or batch export:",
+            "Select document rows and choose what to import or batch export:",
             dialog,
         )
         self.contentModeComboBox = QComboBox(dialog)
         self.contentModeComboBox.addItems(
             [
-                "Prefer Notes",
-                "Notes Only",
-                "Slide Text Only",
-                "Combine Slide Text and Notes",
+                "Prefer Secondary Text",
+                "Secondary Text Only",
+                "Primary Text Only",
+                "Combine Primary and Secondary Text",
             ]
         )
         mode_row.addWidget(self.selectionHelpLabel)
@@ -66,7 +68,7 @@ class Ui_Dialog:
 
         self.previewTable = QTableWidget(0, 3, dialog)
         self.previewTable.setHorizontalHeaderLabels(
-            ["Slide", "Slide Text", "Notes"]
+            ["Item", "Primary Text", "Secondary Text"]
         )
         self.previewTable.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows

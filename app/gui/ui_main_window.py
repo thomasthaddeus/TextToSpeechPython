@@ -34,7 +34,7 @@ class Ui_MainWindow:
         self.editorSplitter = QSplitter(Qt.Orientation.Horizontal, central_widget)
         self.textEdit = QTextEdit(self.editorSplitter)
         self.textEdit.setPlaceholderText(
-            "Type or paste text here, or import PowerPoint notes from the scraper."
+            "Type or paste text here, or import text from a supported document."
         )
         self.ssmlPreview = QTextEdit(self.editorSplitter)
         self.ssmlPreview.setReadOnly(True)
@@ -54,7 +54,7 @@ class Ui_MainWindow:
         self.generateButton = QPushButton("Generate File", self.audioControlsGroup)
         self.stopButton = QPushButton("Stop", self.audioControlsGroup)
         self.openSecondWindowButton = QPushButton(
-            "Import PPTX",
+            "Import Document",
             self.audioControlsGroup,
         )
         self.openSettingsButton = QPushButton(
@@ -77,6 +77,7 @@ class Ui_MainWindow:
             "Type or import text to enable preview and generation actions.",
             central_widget,
         )
+        self.actionHintLabel.setObjectName("actionHintLabel")
         self.actionHintLabel.setWordWrap(True)
         controls_layout.addWidget(self.actionHintLabel, 1, 0, 1, 2)
 
@@ -128,7 +129,7 @@ class Ui_MainWindow:
         self.actionExportAudio = QAction("Export Audio", main_window)
         self.actionExit = QAction("Exit", main_window)
         self.actionSettings = QAction("Settings", main_window)
-        self.actionOpenScraper = QAction("Import PPTX", main_window)
+        self.actionOpenScraper = QAction("Import Document", main_window)
         self.actionAbout = QAction("About", main_window)
 
         self.menuFile.addAction(self.actionOpenText)
