@@ -69,6 +69,11 @@ Currently supported file types include:
 - ``.xlsx`` / ``.xls`` / ``.csv``
 - ``.pptx``
 
+The app checks parser dependency availability at startup and before loading a
+document. If the active environment is missing a package required by an
+advertised format, the UI reports that clearly and points back to
+``poetry install``.
+
 Validation And Action States
 ----------------------------
 

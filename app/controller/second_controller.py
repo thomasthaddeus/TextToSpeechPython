@@ -1,14 +1,15 @@
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QObject, Qt, QThread
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
 from PyQt6.QtWidgets import QTableWidgetItem
 
+from app.controller.background_workers import DocumentParseWorker
 from app.model.scraper.document_scraper import DocumentScraper
 from loguru import logger
 
 
-class SecondController:
+class SecondController(QObject):
     CONTENT_MODE_MAP = {
         "Prefer Secondary Text": "prefer_notes",
         "Secondary Text Only": "notes_only",
@@ -18,9 +19,12 @@ class SecondController:
     }
 
     def __init__(self, view):
+        super().__init__()
         self.view = view
         self.scraper = DocumentScraper()
         self.import_rows = []
+        self.load_thread = None
+        self.load_worker = None
         self.view.browseButton.clicked.connect(self.choose_file)
         self.view.loadButton.clicked.connect(self.load_file)
         self.view.importButton.clicked.connect(self.import_text)
@@ -30,6 +34,7 @@ class SecondController:
             self.view.previewTable.clearSelection
         )
         self.view.closeButton.clicked.connect(self.view.close)
+        self._surface_document_dependency_status()
 
     def _selected_rows(self):
         indexes = self.view.previewTable.selectionModel().selectedRows()
@@ -86,6 +91,32 @@ class SecondController:
 
         self.view.previewTable.resizeColumnsToContents()
 
+    def _set_loading_state(self, is_loading):
+        for button_name in (
+            "browseButton",
+            "loadButton",
+            "importButton",
+            "batchExportButton",
+            "selectAllButton",
+            "clearSelectionButton",
+        ):
+            getattr(self.view, button_name).setEnabled(not is_loading)
+
+        if is_loading:
+            self.view.infoLabel.setText(
+                "Loading document in the background. You can keep the app open."
+            )
+
+    def _surface_document_dependency_status(self):
+        dependency_message = self.scraper.dependency_status_message()
+        if not dependency_message:
+            return
+
+        logger.warning("Document parser dependency check: {}", dependency_message)
+        self.view.infoLabel.setText(
+            "Some import formats are unavailable. Run `poetry install` to install all parser dependencies."
+        )
+
     def choose_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self.view,
@@ -98,6 +129,10 @@ class SecondController:
             logger.info("Selected document file {}", file_path)
 
     def load_file(self):
+        if self.load_thread is not None:
+            self.view.infoLabel.setText("A document is already loading.")
+            return
+
         file_path = self.view.filePathEdit.text().strip()
         if not file_path:
             QMessageBox.warning(
@@ -107,25 +142,48 @@ class SecondController:
             )
             return
 
-        try:
-            extracted_rows = self.scraper.scrape_file(file_path)
-        except Exception as error:
-            logger.exception("Failed to import document file: {}", error)
-            QMessageBox.critical(
-                self.view,
-                "Import Error",
-                f"Unable to read the selected document.\n\n{error}",
-            )
-            return
+        self._set_loading_state(True)
+        self.load_thread = QThread(self.view)
+        self.load_worker = DocumentParseWorker(file_path)
+        self.load_worker.moveToThread(self.load_thread)
+        self.load_thread.started.connect(self.load_worker.run)
+        self.load_worker.finished.connect(self._handle_load_finished)
+        self.load_worker.failed.connect(self._handle_load_failed)
+        self.load_worker.finished.connect(self.load_thread.quit)
+        self.load_worker.failed.connect(self.load_thread.quit)
+        self.load_worker.finished.connect(self.load_worker.deleteLater)
+        self.load_worker.failed.connect(self.load_worker.deleteLater)
+        self.load_thread.finished.connect(self.load_thread.deleteLater)
+        self.load_thread.finished.connect(self._clear_load_worker)
+        self.load_thread.start()
+        logger.info("Started background import for document file {}", file_path)
 
+    def _handle_load_finished(self, extracted_rows):
         self.import_rows = extracted_rows
         self._populate_preview_table()
         if self.import_rows:
             self.view.previewTable.selectAll()
+        self.view.infoLabel.setText(
+            f"Loaded {len(extracted_rows)} document section(s)."
+        )
         logger.info(
             "Loaded document import preview with {} rows.",
             len(extracted_rows),
         )
+
+    def _handle_load_failed(self, message):
+        logger.error("Failed to import document file: {}", message)
+        self.view.infoLabel.setText("Document import failed.")
+        QMessageBox.critical(
+            self.view,
+            "Import Error",
+            f"Unable to read the selected document.\n\n{message}",
+        )
+
+    def _clear_load_worker(self):
+        self.load_thread = None
+        self.load_worker = None
+        self._set_loading_state(False)
 
     def import_text(self):
         selected_rows = self._selected_rows()

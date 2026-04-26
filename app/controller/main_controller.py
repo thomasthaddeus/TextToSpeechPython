@@ -4,7 +4,7 @@ import tempfile
 from datetime import datetime
 from xml.sax.saxutils import escape
 
-from PyQt6.QtCore import QUrl
+from PyQt6.QtCore import QObject, QThread, QUrl
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
 try:
@@ -13,29 +13,37 @@ except ImportError:  # pragma: no cover - optional multimedia backend
     QAudioOutput = None
     QMediaPlayer = None
 
+from app.controller.background_workers import (
+    BatchExportWorker,
+    DocumentParseWorker,
+    build_ssml_document,
+    sanitize_batch_name,
+)
 from app.controller.second_controller import SecondController
 from app.controller.settings_controller import SettingsController
 from app.gui.second_window import SecondApp
 from app.model.api.api_config import get_api_settings
 from app.model.app_settings import AppSettings
 from app.model.processors.tts_processor import TTSProcessor
-from app.model.ssml.text_to_ssml import TextToSSML
+from app.model.scraper.document_scraper import DocumentScraper
 from app.model.ssml.ssml_config import SSMLConfig
 from app.utils.logging_config import configure_logging
 from app.utils.text_cleaner import TextCleaner
 from loguru import logger
 
 
-class MainController:
+class MainController(QObject):
     SETTINGS_PATH = Path("data/dynamic/app_settings.json")
     AUDIO_HISTORY_PATH = Path("data/dynamic/audio_history.json")
     MAX_HISTORY_ITEMS = 10
 
     def __init__(self, view):
+        super().__init__()
         self.view = view
         self.cleaner = TextCleaner()
         self.settings = AppSettings.load(self.SETTINGS_PATH)
         self.voice_config = SSMLConfig()
+        self.document_scraper = DocumentScraper()
         self.tts_processor = None
         self.settings_controller = SettingsController(self.view)
         self.second_window = None
@@ -44,6 +52,12 @@ class MainController:
         self.preview_audio_path = None
         self.audio_output = None
         self.media_player = None
+        self.document_parse_thread = None
+        self.document_parse_worker = None
+        self.document_parse_path = None
+        self.batch_export_thread = None
+        self.batch_export_worker = None
+        self.batch_export_active = False
         self._updating_ui_state = False
         self.audio_history = self._load_audio_history()
         self._setup_media_backend()
@@ -51,6 +65,7 @@ class MainController:
         self._refresh_ui_state()
         self._refresh_history_panel()
         self.update_ssml_preview()
+        self._surface_document_dependency_status()
         logger.info("Main controller initialized.")
 
     def _setup_media_backend(self):
@@ -73,7 +88,7 @@ class MainController:
         self.view.playbackVolumeSlider.valueChanged.connect(
             self.update_playback_volume
         )
-        self.view.actionOpenText.triggered.connect(self.open_text_file)
+        self.view.actionOpenText.triggered.connect(self.open_document_file)
         self.view.actionSaveText.triggered.connect(self.save_text_file)
         self.view.actionExportAudio.triggered.connect(self.export_audio_file)
         self.view.actionExit.triggered.connect(self.view.close)
@@ -83,12 +98,7 @@ class MainController:
         self.view.textEdit.textChanged.connect(self._handle_editor_text_changed)
 
     def _sanitize_batch_name(self, value):
-        sanitized = "".join(
-            character if character.isalnum() or character in ("-", "_") else "_"
-            for character in value.strip().lower()
-        )
-        sanitized = sanitized.strip("_")
-        return sanitized or "item"
+        return sanitize_batch_name(value)
 
     def _refresh_ui_state(self):
         self._updating_ui_state = True
@@ -116,6 +126,16 @@ class MainController:
             )
         self._updating_ui_state = False
 
+    def _surface_document_dependency_status(self):
+        dependency_message = self.document_scraper.dependency_status_message()
+        if not dependency_message:
+            return
+
+        logger.warning("Document parser dependency check: {}", dependency_message)
+        self.view.statusbar.showMessage(
+            "Some import formats are unavailable. Run `poetry install` to install all parser dependencies."
+        )
+
     def _current_editor_text(self):
         return self.view.textEdit.toPlainText().strip()
 
@@ -128,6 +148,9 @@ class MainController:
             self.media_player is not None and self.audio_output is not None
         )
         has_preview_audio = bool(self.preview_audio_path)
+        background_work_active = self.__dict__.get("batch_export_active", False) or (
+            self.__dict__.get("document_parse_thread") is not None
+        )
 
         self.view.previewButton.setEnabled(has_text)
         self.view.cleanTextButton.setEnabled(has_text)
@@ -147,6 +170,18 @@ class MainController:
             self.view.playButton.setToolTip(
                 "Generate a preview file. Live playback is unavailable in this environment."
             )
+
+        if background_work_active:
+            self.view.previewButton.setEnabled(False)
+            self.view.cleanTextButton.setEnabled(False)
+            self.view.playButton.setEnabled(False)
+            self.view.generateButton.setEnabled(False)
+            self.view.actionExportAudio.setEnabled(False)
+            self.view.stopButton.setEnabled(False)
+            self._set_inline_hint(
+                "Background work is running. Generation actions will unlock when it finishes."
+            )
+            return
 
         if not has_text:
             self._set_inline_hint(
@@ -286,40 +321,28 @@ class MainController:
         return self.tts_processor
 
     def _build_ssml(self, text):
-        working_text = text
-        if self.settings.auto_clean_text:
-            working_text = self.cleaner.clean_all(working_text)
+        return build_ssml_document(text, self.settings, self.cleaner)
 
-        working_text = escape(working_text)
+    def _combine_document_rows(self, rows, content_mode="prefer_notes"):
+        chunks = []
+        for row in rows:
+            primary_text = (row.get("primary_text") or "").strip()
+            secondary_text = (row.get("secondary_text") or "").strip()
 
-        converter = TextToSSML(voice_name=self.settings.voice)
-        ssml_content = working_text
-
-        if self.settings.pause_duration != "none":
-            pause_tag = f'<break time="{self.settings.pause_duration}"/>'
-            if self.settings.pause_position == "before":
-                ssml_content = f"{pause_tag}{ssml_content}"
+            if content_mode == "notes_only":
+                resolved_text = secondary_text
+            elif content_mode == "slide_text_only":
+                resolved_text = primary_text
+            elif content_mode == "combine":
+                resolved_parts = [part for part in (primary_text, secondary_text) if part]
+                resolved_text = "\n\n".join(resolved_parts)
             else:
-                ssml_content = f"{ssml_content}{pause_tag}"
+                resolved_text = secondary_text or primary_text
 
-        if self.settings.emphasis_level != "none":
-            ssml_content = (
-                f'<emphasis level="{self.settings.emphasis_level}">{ssml_content}</emphasis>'
-            )
+            if resolved_text:
+                chunks.append(resolved_text)
 
-        prosody_attributes = [
-            f'rate="{self.settings.speaking_rate}"',
-            f'volume="{self.settings.synthesis_volume}"',
-        ]
-        if self.settings.pitch != "default":
-            prosody_attributes.append(f'pitch="{self.settings.pitch}"')
-        if self.settings.pitch_range != "default":
-            prosody_attributes.append(f'range="{self.settings.pitch_range}"')
-
-        prosody_text = (
-            f"<prosody {' '.join(prosody_attributes)}>{ssml_content}</prosody>"
-        )
-        return converter.convert(prosody_text)
+        return "\n\n".join(chunks)
 
     def update_ssml_preview(self):
         text = self._current_editor_text()
@@ -464,11 +487,35 @@ class MainController:
         logger.info("Saved audio export to {}", file_path)
 
     def batch_export_imported_rows(self, rows):
+        if self.batch_export_active:
+            QMessageBox.information(
+                self.view,
+                "Batch Export Running",
+                "A batch export is already running. Wait for it to finish before starting another one.",
+            )
+            return
+
         if not rows:
             QMessageBox.information(
                 self.view,
                 "Nothing To Export",
-                "Select one or more imported slide rows before batch exporting.",
+                "Select one or more imported document rows before batch exporting.",
+            )
+            return
+
+        azure_key, azure_region = self._resolve_azure_credentials()
+        if not azure_key or not azure_region:
+            QMessageBox.warning(
+                self.view,
+                "Azure Setup Required",
+                (
+                    "The application could not find valid Azure Speech credentials.\n\n"
+                    "Open Tools > Settings and enter your Azure key and region, "
+                    "or create a valid .env file."
+                ),
+            )
+            self.view.statusbar.showMessage(
+                "Azure credentials are required before batch export."
             )
             return
 
@@ -483,62 +530,98 @@ class MainController:
             self.view.statusbar.showMessage("Batch export canceled.")
             return
 
-        selected_path = Path(selected_dir)
-        exported_files = []
-        for row in rows:
-            resolved_text = (row.get("resolved_text") or "").strip()
-            if not resolved_text:
-                continue
+        self.batch_export_active = True
+        self._refresh_action_states()
+        self.view.statusbar.showMessage("Batch export started in the background.")
 
-            audio_data = self._synthesize_text(resolved_text)
-            if audio_data is None:
-                if exported_files:
-                    self.view.statusbar.showMessage(
-                        f"Batch export stopped after {len(exported_files)} files."
-                    )
-                return
+        self.batch_export_thread = QThread(self.view)
+        self.batch_export_worker = BatchExportWorker(
+            rows=rows,
+            output_dir=selected_dir,
+            settings=self.settings,
+            azure_key=azure_key,
+            azure_region=azure_region,
+        )
+        self.batch_export_worker.moveToThread(self.batch_export_thread)
+        self.batch_export_thread.started.connect(self.batch_export_worker.run)
+        self.batch_export_worker.progress.connect(self._handle_batch_export_progress)
+        self.batch_export_worker.finished.connect(self._handle_batch_export_finished)
+        self.batch_export_worker.failed.connect(self._handle_batch_export_failed)
+        self.batch_export_worker.finished.connect(self.batch_export_thread.quit)
+        self.batch_export_worker.failed.connect(self.batch_export_thread.quit)
+        self.batch_export_worker.finished.connect(self.batch_export_worker.deleteLater)
+        self.batch_export_worker.failed.connect(self.batch_export_worker.deleteLater)
+        self.batch_export_thread.finished.connect(self.batch_export_thread.deleteLater)
+        self.batch_export_thread.finished.connect(self._clear_batch_export_worker)
+        self.batch_export_thread.start()
+        logger.info("Started background batch export to {}", selected_dir)
 
-            mode_name = self._sanitize_batch_name(
-                row.get("content_mode", "prefer_notes")
-            )
-            title_name = self._sanitize_batch_name(
-                row.get("title", f"item_{row.get('item_number', 0)}")
-            )
-            file_name = (
-                f"item_{int(row.get('item_number', 0)):02d}_{title_name}_{mode_name}.mp3"
-            )
-            file_path = selected_path / file_name
-            with open(file_path, "wb") as file:
-                file.write(audio_data)
+    def _handle_batch_export_progress(self, completed, total, file_path):
+        self.latest_audio_path = file_path
+        self.view.statusbar.showMessage(
+            f"Batch export progress: {completed}/{total} files generated."
+        )
 
-            exported_files.append(file_path)
-            self.latest_audio_path = str(file_path)
-            self._record_audio_history(file_path, "export")
+    def _handle_batch_export_finished(self, exported_files):
+        exported_paths = [Path(file_path) for file_path in exported_files]
+        self.batch_export_active = False
 
-        if not exported_files:
+        if not exported_paths:
             QMessageBox.information(
                 self.view,
                 "No Content",
                 "The selected rows did not contain exportable content.",
             )
+            self.view.statusbar.showMessage("Batch export finished with no content.")
             return
 
+        for file_path in exported_paths:
+            self.latest_audio_path = str(file_path)
+            self._record_audio_history(file_path, "export")
+
+        selected_path = exported_paths[0].parent
         self.view.statusbar.showMessage(
-            f"Batch exported {len(exported_files)} audio files to {selected_path}"
+            f"Batch exported {len(exported_paths)} audio files to {selected_path}"
         )
         QMessageBox.information(
             self.view,
             "Batch Export Complete",
             (
-                f"Created {len(exported_files)} audio files in:\n\n"
+                f"Created {len(exported_paths)} audio files in:\n\n"
                 f"{selected_path}"
             ),
         )
         logger.info(
             "Batch exported {} document audio files to {}",
-            len(exported_files),
+            len(exported_paths),
             selected_path,
         )
+
+    def _handle_batch_export_failed(self, message, exported_files):
+        self.batch_export_active = False
+        exported_paths = [Path(file_path) for file_path in exported_files]
+        for file_path in exported_paths:
+            self.latest_audio_path = str(file_path)
+            self._record_audio_history(file_path, "export")
+
+        if exported_paths:
+            self.view.statusbar.showMessage(
+                f"Batch export stopped after {len(exported_paths)} files."
+            )
+        else:
+            self.view.statusbar.showMessage("Batch export failed.")
+
+        QMessageBox.critical(
+            self.view,
+            "Batch Export Error",
+            f"Unable to finish batch export.\n\n{message}",
+        )
+
+    def _clear_batch_export_worker(self):
+        self.batch_export_thread = None
+        self.batch_export_worker = None
+        self.batch_export_active = False
+        self._refresh_action_states()
 
     def update_playback_volume(self, value):
         self.settings.playback_volume = value
@@ -549,35 +632,110 @@ class MainController:
             self.settings.save(self.SETTINGS_PATH)
         logger.info("Playback volume changed to {}%", value)
 
-    def open_text_file(self):
+    def open_document_file(self):
+        if self.document_parse_thread is not None:
+            QMessageBox.information(
+                self.view,
+                "Document Loading",
+                "A document is already loading. Wait for it to finish before opening another one.",
+            )
+            return
+
         file_path, _ = QFileDialog.getOpenFileName(
             self.view,
-            "Open Text File",
+            "Open Document",
             str(Path.cwd()),
-            "Text Files (*.txt);;All Files (*.*)",
+            self.document_scraper.SUPPORTED_FILTER,
         )
         if not file_path:
             return
 
-        with open(file_path, "r", encoding="utf-8") as file:
-            self.view.textEdit.setPlainText(file.read())
+        self.document_parse_path = file_path
+        self.document_parse_thread = QThread(self.view)
+        self.document_parse_worker = DocumentParseWorker(file_path)
+        self.document_parse_worker.moveToThread(self.document_parse_thread)
+        self.document_parse_thread.started.connect(self.document_parse_worker.run)
+        self.document_parse_worker.finished.connect(
+            self._handle_document_parse_finished
+        )
+        self.document_parse_worker.failed.connect(self._handle_document_parse_failed)
+        self.document_parse_worker.finished.connect(self.document_parse_thread.quit)
+        self.document_parse_worker.failed.connect(self.document_parse_thread.quit)
+        self.document_parse_worker.finished.connect(
+            self.document_parse_worker.deleteLater
+        )
+        self.document_parse_worker.failed.connect(
+            self.document_parse_worker.deleteLater
+        )
+        self.document_parse_thread.finished.connect(
+            self.document_parse_thread.deleteLater
+        )
+        self.document_parse_thread.finished.connect(self._clear_document_parse_worker)
         self._refresh_action_states()
-        self.view.statusbar.showMessage(f"Loaded text from {file_path}")
-        logger.info("Loaded text file {}", file_path)
+        self.view.statusbar.showMessage("Loading document in the background.")
+        self.document_parse_thread.start()
+        logger.info("Started background document load for {}", file_path)
+
+    def _handle_document_parse_finished(self, rows):
+        imported_text = self._combine_document_rows(rows)
+        file_path = self.document_parse_path
+        if not imported_text.strip():
+            QMessageBox.information(
+                self.view,
+                "No Content",
+                "The selected document did not contain readable text.",
+            )
+            self.view.statusbar.showMessage(
+                "Document load finished with no readable text."
+            )
+            return
+
+        self.view.textEdit.setPlainText(imported_text)
+        self._refresh_action_states()
+        self.view.statusbar.showMessage(
+            f"Loaded {len(rows)} document section(s) from {file_path}"
+        )
+        logger.info("Loaded document {}", file_path)
+
+    def _handle_document_parse_failed(self, message):
+        logger.error("Failed to open document: {}", message)
+        QMessageBox.critical(
+            self.view,
+            "Open Error",
+            f"Unable to read the selected document.\n\n{message}",
+        )
+        self.view.statusbar.showMessage("Document load failed.")
+
+    def _clear_document_parse_worker(self):
+        self.document_parse_thread = None
+        self.document_parse_worker = None
+        self.document_parse_path = None
+        self._refresh_action_states()
 
     def save_text_file(self):
         file_path, _ = QFileDialog.getSaveFileName(
             self.view,
-            "Save Text File",
+            "Save Editor Text",
             str(Path.cwd() / "speech_input.txt"),
-            "Text Files (*.txt)",
+            "Text Files (*.txt);;Markdown Files (*.md);;HTML Files (*.html)",
         )
         if not file_path:
             return
 
+        output_text = self.view.textEdit.toPlainText()
+        if file_path.lower().endswith(".html"):
+            escaped_text = escape(output_text).replace("\n", "<br/>\n")
+            output_text = (
+                "<!DOCTYPE html>\n"
+                "<html>\n"
+                "<head><meta charset=\"utf-8\"><title>Speech Input</title></head>\n"
+                f"<body><p>{escaped_text}</p></body>\n"
+                "</html>\n"
+            )
+
         with open(file_path, "w", encoding="utf-8") as file:
-            file.write(self.view.textEdit.toPlainText())
-        self.view.statusbar.showMessage(f"Saved text to {file_path}")
+            file.write(output_text)
+        self.view.statusbar.showMessage(f"Saved editor text to {file_path}")
         logger.info("Saved editor contents to {}", file_path)
 
     def open_settings(self):
