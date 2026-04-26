@@ -1,0 +1,13 @@
+Fixture ID: PLAIN-BASIC-01
+
+
+
+Baseline Plain Text Import
+
+
+
+The baseline plain text fixture describes a small archive clerk preparing a batch of intake documents for a speech generation pipeline.
+
+Each paragraph uses simple sentence boundaries so the importer can split the content into multiple predictable text blocks.
+
+The final paragraph mentions that the source file is intentionally modest, readable, and distinct from every other test document in the fixture set.

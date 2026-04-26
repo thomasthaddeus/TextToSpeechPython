@@ -33,6 +33,11 @@ From the project root:
 poetry install
 ```
 
+This install path includes the parser libraries needed for every format shown
+in the document import dialog. If the active interpreter is missing one of those
+packages, the app shows a startup/import warning and asks you to run
+`poetry install`.
+
 ## Running The App
 
 You can launch the application in either of these ways:
@@ -135,6 +140,8 @@ The app writes runtime artifacts under `data/dynamic/`, including:
 - If multimedia playback support is unavailable in the environment, preview
   generation still works, but playback controls are disabled and the UI relabels
   the preview action accordingly.
+- If a parser package for an advertised document format is missing, the app
+  reports that clearly instead of failing with a raw import error.
 - Preview audio files are temporary and cleaned up automatically.
 
 ## Project Layout
@@ -153,12 +160,12 @@ The repo currently includes focused regression tests for:
 - SSML escaping and advanced SSML markup
 - audio history persistence
 - document import content-mode resolution
-- normalized document scraping for `.txt` and `.html`
+- normalized document scraping and dependency checks for supported import formats
 
 Run them with:
 
 ```bash
-python -m unittest tests.test_main_controller_ssml tests.test_main_controller_history tests.test_second_controller_import tests.test_document_scraper
+python -m unittest discover -s tests
 ```
 
 ## License

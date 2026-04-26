@@ -1,0 +1,4 @@
+row_id,fixture_id,section,note
+1,CSV-BASIC-01,intake,The intake row describes a blue folder arriving before the morning import cycle.
+2,CSV-BASIC-01,validation,The validation row mentions a checksum note and a reviewer named Priya.
+3,CSV-BASIC-01,export,The export row confirms that flattened spreadsheet text remains unique.

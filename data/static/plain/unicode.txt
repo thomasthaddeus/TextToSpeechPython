@@ -1,0 +1,13 @@
+Fixture ID: PLAIN-UNICODE-01
+
+
+
+Unicode Punctuation and Symbol Review
+
+
+
+Curly quotes, apostrophes, and symbols appear here: “quoted text,” café, naïve, résumé, piñata, £42, €17, and 98%. 
+
+The fixture checks whether punctuation survives extraction without turning accented words into unreadable replacement characters.
+
+A reviewer named Zoë notes that clean Unicode handling is important when generated audio should pronounce names and symbols naturally.

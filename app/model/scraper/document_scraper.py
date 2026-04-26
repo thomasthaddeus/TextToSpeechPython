@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import importlib.util
 from pathlib import Path
 
 
@@ -14,12 +15,19 @@ class DocumentRow:
     secondary_text: str = ""
 
 
+@dataclass(frozen=True)
+class ParserDependency:
+    module_name: str
+    package_name: str
+    purpose: str
+
+
 class DocumentScraper:
     """Scrape common document formats into normalized document rows."""
 
     SUPPORTED_FILTER = (
         "Supported Documents (*.txt *.docx *.pdf *.html *.htm *.rtf *.epub "
-        "*.xlsx *.xls *.csv *.pptx);;"
+        "*.xlsx *.xls *.csv *.pptx *.png *.jpg *.jpeg *.tif *.tiff *.bmp *.webp);;"
         "Text Documents (*.txt);;"
         "Word Documents (*.docx);;"
         "PDF Files (*.pdf);;"
@@ -28,12 +36,132 @@ class DocumentScraper:
         "EPUB Files (*.epub);;"
         "Spreadsheet Files (*.xlsx *.xls *.csv);;"
         "PowerPoint Files (*.pptx);;"
+        "Image Files (*.png *.jpg *.jpeg *.tif *.tiff *.bmp *.webp);;"
         "All Files (*.*)"
     )
+    FORMAT_DEPENDENCIES = {
+        ".txt": (),
+        ".docx": (
+            ParserDependency("docx", "python-docx", "Word document imports"),
+        ),
+        ".pdf": (
+            ParserDependency("pypdf", "pypdf", "PDF text-layer imports"),
+        ),
+        ".html": (
+            ParserDependency("bs4", "beautifulsoup4", "HTML imports"),
+        ),
+        ".htm": (
+            ParserDependency("bs4", "beautifulsoup4", "HTML imports"),
+        ),
+        ".rtf": (
+            ParserDependency("striprtf", "striprtf", "RTF imports"),
+        ),
+        ".epub": (
+            ParserDependency("bs4", "beautifulsoup4", "EPUB HTML extraction"),
+            ParserDependency("ebooklib", "ebooklib", "EPUB imports"),
+        ),
+        ".xlsx": (
+            ParserDependency("pandas", "pandas", "spreadsheet imports"),
+            ParserDependency("openpyxl", "openpyxl", "XLSX imports"),
+        ),
+        ".xls": (
+            ParserDependency("pandas", "pandas", "spreadsheet imports"),
+            ParserDependency("xlrd", "xlrd", "legacy XLS imports"),
+        ),
+        ".csv": (
+            ParserDependency("pandas", "pandas", "CSV imports"),
+        ),
+        ".pptx": (
+            ParserDependency("pptx", "python-pptx", "PowerPoint imports"),
+        ),
+        ".png": (
+            ParserDependency("PIL", "pillow", "image imports"),
+            ParserDependency("pytesseract", "pytesseract", "image OCR imports"),
+        ),
+        ".jpg": (
+            ParserDependency("PIL", "pillow", "image imports"),
+            ParserDependency("pytesseract", "pytesseract", "image OCR imports"),
+        ),
+        ".jpeg": (
+            ParserDependency("PIL", "pillow", "image imports"),
+            ParserDependency("pytesseract", "pytesseract", "image OCR imports"),
+        ),
+        ".tif": (
+            ParserDependency("PIL", "pillow", "image imports"),
+            ParserDependency("pytesseract", "pytesseract", "image OCR imports"),
+        ),
+        ".tiff": (
+            ParserDependency("PIL", "pillow", "image imports"),
+            ParserDependency("pytesseract", "pytesseract", "image OCR imports"),
+        ),
+        ".bmp": (
+            ParserDependency("PIL", "pillow", "image imports"),
+            ParserDependency("pytesseract", "pytesseract", "image OCR imports"),
+        ),
+        ".webp": (
+            ParserDependency("PIL", "pillow", "image imports"),
+            ParserDependency("pytesseract", "pytesseract", "image OCR imports"),
+        ),
+    }
+    OCR_PDF_DEPENDENCIES = (
+        ParserDependency("pypdfium2", "pypdfium2", "scanned PDF rendering"),
+        ParserDependency("PIL", "pillow", "scanned PDF image handling"),
+        ParserDependency("pytesseract", "pytesseract", "scanned PDF OCR"),
+    )
+
+    @classmethod
+    def missing_dependencies_for_suffix(cls, suffix):
+        """Return parser dependencies missing for a specific file suffix."""
+        normalized_suffix = suffix.lower()
+        return [
+            dependency
+            for dependency in cls.FORMAT_DEPENDENCIES.get(normalized_suffix, ())
+            if importlib.util.find_spec(dependency.module_name) is None
+        ]
+
+    @classmethod
+    def missing_runtime_dependencies(cls):
+        """Return missing parser dependencies for advertised import formats."""
+        missing_by_package = {}
+        for dependencies in cls.FORMAT_DEPENDENCIES.values():
+            for dependency in dependencies:
+                if importlib.util.find_spec(dependency.module_name) is None:
+                    missing_by_package[dependency.package_name] = dependency
+
+        for dependency in cls.OCR_PDF_DEPENDENCIES:
+            if importlib.util.find_spec(dependency.module_name) is None:
+                missing_by_package[dependency.package_name] = dependency
+
+        return sorted(missing_by_package.values(), key=lambda item: item.package_name)
+
+    @classmethod
+    def format_missing_dependency_message(cls, dependencies):
+        packages = ", ".join(dependency.package_name for dependency in dependencies)
+        return (
+            f"Missing parser package(s): {packages}. "
+            "Run `poetry install` from the project directory so all advertised "
+            "document formats are available."
+        )
+
+    @classmethod
+    def dependency_status_message(cls):
+        missing_dependencies = cls.missing_runtime_dependencies()
+        if not missing_dependencies:
+            return ""
+        return cls.format_missing_dependency_message(missing_dependencies)
 
     def scrape_file(self, file_path):
         path = Path(file_path)
         suffix = path.suffix.lower()
+
+        if suffix not in self.FORMAT_DEPENDENCIES:
+            raise ValueError(f"Unsupported document type: {suffix or '[none]'}")
+
+        missing_dependencies = self.missing_dependencies_for_suffix(suffix)
+        if missing_dependencies:
+            raise RuntimeError(
+                self.format_missing_dependency_message(missing_dependencies)
+            )
 
         if suffix == ".txt":
             rows = self._scrape_txt(path)
@@ -51,10 +179,13 @@ class DocumentScraper:
             rows = self._scrape_spreadsheet(path)
         elif suffix == ".pptx":
             rows = self._scrape_pptx(path)
-        else:
-            raise ValueError(f"Unsupported document type: {suffix or '[none]'}")
-
-        return [self._row_to_dict(row, path) for row in rows if self._has_content(row)]
+        elif suffix in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}:
+            rows = self._scrape_image(path)
+        return [
+            self._row_to_dict(row, path)
+            for row in rows
+            if self._has_content(row)
+        ]
 
     def _row_to_dict(self, row, path):
         return {
@@ -67,7 +198,10 @@ class DocumentScraper:
         }
 
     def _has_content(self, row):
-        return bool((row.primary_text or "").strip() or (row.secondary_text or "").strip())
+        return bool(
+            (row.primary_text or "").strip()
+            or (row.secondary_text or "").strip()
+        )
 
     def _split_blocks(self, text):
         normalized = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -102,9 +236,33 @@ class DocumentScraper:
 
         reader = PdfReader(str(path))
         rows = []
+        needs_ocr = False
         for index, page in enumerate(reader.pages, start=1):
             page_text = (page.extract_text() or "").strip()
+            if not page_text:
+                needs_ocr = True
             rows.append(DocumentRow(index, f"Page {index}", page_text))
+
+        if needs_ocr:
+            ocr_rows = self._perform_ocr_on_pdf(path)
+            if ocr_rows:
+                merged_rows = []
+                for row_index, row in enumerate(rows, start=1):
+                    ocr_row = ocr_rows[row_index - 1] if row_index - 1 < len(ocr_rows) else None
+                    if row.primary_text.strip():
+                        merged_rows.append(row)
+                    elif ocr_row and self._has_content(ocr_row):
+                        merged_rows.append(
+                            DocumentRow(
+                                row.item_number,
+                                row.title,
+                                ocr_row.primary_text,
+                                ocr_row.secondary_text,
+                            )
+                        )
+                    else:
+                        merged_rows.append(row)
+                rows = merged_rows
         return rows
 
     def _scrape_html(self, path):
@@ -147,6 +305,8 @@ class DocumentScraper:
         item_number = 1
         for item in book.get_items():
             if item.get_type() != ITEM_DOCUMENT:
+                continue
+            if hasattr(item, "is_chapter") and not item.is_chapter():
                 continue
             soup = BeautifulSoup(item.get_content(), "html.parser")
             title = soup.title.get_text(strip=True) if soup.title else f"Chapter {item_number}"
@@ -209,3 +369,45 @@ class DocumentScraper:
                 )
             )
         return rows
+
+    def _scrape_image(self, path):
+        ocr_text = self._perform_ocr_on_image(path)
+        return [DocumentRow(1, path.stem or "Image 1", ocr_text)]
+
+    def _perform_ocr_on_pdf(self, path):
+        try:
+            import pypdfium2 as pdfium
+        except ImportError as error:
+            raise ValueError(
+                "OCR support for scanned PDFs requires the 'pypdfium2' package."
+            ) from error
+
+        document = pdfium.PdfDocument(str(path))
+        rows = []
+        for index in range(len(document)):
+            page = document[index]
+            bitmap = page.render(scale=2).to_pil()
+            page_text = self._ocr_image_object(bitmap)
+            rows.append(DocumentRow(index + 1, f"Page {index + 1}", page_text))
+        return rows
+
+    def _perform_ocr_on_image(self, path):
+        try:
+            from PIL import Image
+        except ImportError as error:
+            raise ValueError(
+                "OCR support for image files requires the 'Pillow' package."
+            ) from error
+
+        with Image.open(path) as image:
+            return self._ocr_image_object(image)
+
+    def _ocr_image_object(self, image):
+        try:
+            import pytesseract
+        except ImportError as error:
+            raise ValueError(
+                "OCR support requires the 'pytesseract' package and a Tesseract installation."
+            ) from error
+
+        return pytesseract.image_to_string(image).strip()
