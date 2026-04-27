@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import importlib.util
 from pathlib import Path
 
@@ -13,6 +13,7 @@ class DocumentRow:
     title: str
     primary_text: str
     secondary_text: str = ""
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -195,6 +196,7 @@ class DocumentScraper:
             "secondary_text": row.secondary_text,
             "source_path": str(path),
             "source_type": path.suffix.lower().lstrip("."),
+            "metadata": dict(row.metadata),
         }
 
     def _has_content(self, row):
@@ -208,6 +210,137 @@ class DocumentScraper:
         blocks = [block.strip() for block in normalized.split("\n\n")]
         return [block for block in blocks if block]
 
+    def _heading_level(self, style_name):
+        normalized_style = (style_name or "").strip().lower()
+        if not normalized_style.startswith("heading"):
+            return None
+
+        level_text = normalized_style.replace("heading", "").strip()
+        return int(level_text) if level_text.isdigit() else 1
+
+    def _table_to_rows(self, table_rows, start_item_number, table_index):
+        extracted_rows = []
+        raw_rows = []
+        for row in table_rows:
+            if hasattr(row, "cells"):
+                raw_rows.append([cell.text.strip() for cell in row.cells])
+            else:
+                raw_rows.append([str(cell).strip() for cell in row])
+        raw_rows = [row for row in raw_rows if any(cell for cell in row)]
+        if not raw_rows:
+            return extracted_rows
+
+        headers = raw_rows[0]
+        data_rows = raw_rows[1:] if len(raw_rows) > 1 else raw_rows
+        for row_offset, cells in enumerate(data_rows, start=1):
+            if len(headers) == len(cells) and len(raw_rows) > 1:
+                values = [
+                    f"{header or f'Column {index + 1}'}: {value}"
+                    for index, (header, value) in enumerate(zip(headers, cells))
+                    if value
+                ]
+            else:
+                values = [
+                    f"Column {index + 1}: {value}"
+                    for index, value in enumerate(cells)
+                    if value
+                ]
+
+            if not values:
+                continue
+
+            extracted_rows.append(
+                DocumentRow(
+                    start_item_number + len(extracted_rows),
+                    f"Table {table_index} Row {row_offset}",
+                    "\n".join(values),
+                    f"Table: {table_index}",
+                    {
+                        "kind": "table_row",
+                        "table_number": table_index,
+                        "row_number": row_offset,
+                        "headers": headers if len(raw_rows) > 1 else [],
+                    },
+                )
+            )
+        return extracted_rows
+
+    def _html_to_rows(self, soup, document_title, row_kind):
+        rows = []
+        current_heading = None
+        current_level = None
+        current_chunks = []
+        table_index = 1
+
+        def flush_section():
+            nonlocal current_heading, current_level, current_chunks
+            if not current_chunks:
+                return
+
+            item_number = len(rows) + 1
+            rows.append(
+                DocumentRow(
+                    item_number,
+                    current_heading or f"{document_title} Section {item_number}",
+                    "\n\n".join(current_chunks),
+                    metadata={
+                        "kind": row_kind,
+                        "heading": current_heading,
+                        "heading_level": current_level,
+                    },
+                )
+            )
+            current_heading = None
+            current_level = None
+            current_chunks = []
+
+        body = soup.body or soup
+        for element in body.find_all(
+            ["h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "table"]
+        ):
+            text = element.get_text(" ", strip=True)
+            if not text:
+                continue
+
+            tag_name = element.name.lower()
+            if tag_name.startswith("h") and tag_name[1:].isdigit():
+                flush_section()
+                current_heading = text
+                current_level = int(tag_name[1:])
+                current_chunks = [text]
+            elif tag_name == "li":
+                current_chunks.append(f"- {text}")
+            elif tag_name == "table":
+                flush_section()
+                table_rows = [
+                    [cell.get_text(" ", strip=True) for cell in row.find_all(["th", "td"])]
+                    for row in element.find_all("tr")
+                ]
+                rows.extend(
+                    self._table_to_rows(
+                        table_rows,
+                        len(rows) + 1,
+                        table_index,
+                    )
+                )
+                table_index += 1
+            else:
+                current_chunks.append(text)
+
+        flush_section()
+        if rows:
+            return rows
+
+        text = body.get_text(" ", strip=True)
+        return [
+            DocumentRow(
+                1,
+                f"{document_title} Section 1",
+                text,
+                metadata={"kind": row_kind},
+            )
+        ] if text else []
+
     def _scrape_txt(self, path):
         text = path.read_text(encoding="utf-8")
         blocks = self._split_blocks(text) or [text.strip()]
@@ -219,17 +352,83 @@ class DocumentScraper:
 
     def _scrape_docx(self, path):
         from docx import Document
+        from docx.oxml.table import CT_Tbl
+        from docx.oxml.text.paragraph import CT_P
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
 
         document = Document(path)
-        paragraphs = [
-            paragraph.text.strip()
-            for paragraph in document.paragraphs
-            if paragraph.text.strip()
-        ]
-        return [
-            DocumentRow(index, f"Paragraph {index}", paragraph)
-            for index, paragraph in enumerate(paragraphs, start=1)
-        ]
+        rows = []
+        item_number = 1
+        section_title = None
+        section_level = None
+        section_chunks = []
+        paragraph_index = 1
+        table_index = 1
+
+        def flush_section():
+            nonlocal item_number, section_title, section_level, section_chunks
+            if not section_chunks:
+                return
+
+            rows.append(
+                DocumentRow(
+                    item_number,
+                    section_title or f"Document Section {item_number}",
+                    "\n\n".join(section_chunks),
+                    metadata={
+                        "kind": "section",
+                        "heading_level": section_level,
+                    },
+                )
+            )
+            item_number += 1
+            section_title = None
+            section_level = None
+            section_chunks = []
+
+        for child in document.element.body.iterchildren():
+            if isinstance(child, CT_P):
+                block = Paragraph(child, document)
+                text = block.text.strip()
+                if not text:
+                    continue
+
+                style_name = block.style.name if block.style else ""
+                heading_level = self._heading_level(style_name)
+                if heading_level is not None:
+                    flush_section()
+                    section_title = text
+                    section_level = heading_level
+                    section_chunks = [text]
+                    continue
+
+                if section_title:
+                    section_chunks.append(text)
+                else:
+                    rows.append(
+                        DocumentRow(
+                            item_number,
+                            f"Paragraph {paragraph_index}",
+                            text,
+                            metadata={
+                                "kind": "paragraph",
+                                "paragraph_index": paragraph_index,
+                            },
+                        )
+                    )
+                    item_number += 1
+                    paragraph_index += 1
+            elif isinstance(child, CT_Tbl):
+                flush_section()
+                table = Table(child, document)
+                table_rows = self._table_to_rows(table.rows, item_number, table_index)
+                rows.extend(table_rows)
+                item_number += len(table_rows)
+                table_index += 1
+
+        flush_section()
+        return rows
 
     def _scrape_pdf(self, path):
         from pypdf import PdfReader
@@ -241,7 +440,18 @@ class DocumentScraper:
             page_text = (page.extract_text() or "").strip()
             if not page_text:
                 needs_ocr = True
-            rows.append(DocumentRow(index, f"Page {index}", page_text))
+            rows.append(
+                DocumentRow(
+                    index,
+                    f"Page {index}",
+                    page_text,
+                    metadata={
+                        "kind": "page",
+                        "page_number": index,
+                        "extraction": "text-layer" if page_text else "ocr-needed",
+                    },
+                )
+            )
 
         if needs_ocr:
             ocr_rows = self._perform_ocr_on_pdf(path)
@@ -258,6 +468,11 @@ class DocumentScraper:
                                 row.title,
                                 ocr_row.primary_text,
                                 ocr_row.secondary_text,
+                                {
+                                    "kind": "page",
+                                    "page_number": row.item_number,
+                                    "extraction": "ocr",
+                                },
                             )
                         )
                     else:
@@ -271,18 +486,7 @@ class DocumentScraper:
         html = path.read_text(encoding="utf-8")
         soup = BeautifulSoup(html, "html.parser")
         title = soup.title.get_text(strip=True) if soup.title else path.stem
-        paragraphs = [
-            element.get_text(" ", strip=True)
-            for element in soup.find_all(["h1", "h2", "h3", "p", "li"])
-            if element.get_text(" ", strip=True)
-        ]
-        if not paragraphs:
-            paragraphs = [soup.get_text(" ", strip=True)]
-        return [
-            DocumentRow(index, f"{title} Section {index}", paragraph)
-            for index, paragraph in enumerate(paragraphs, start=1)
-            if paragraph
-        ]
+        return self._html_to_rows(soup, title, "html_section")
 
     def _scrape_rtf(self, path):
         from striprtf.striprtf import rtf_to_text
@@ -309,11 +513,32 @@ class DocumentScraper:
             if hasattr(item, "is_chapter") and not item.is_chapter():
                 continue
             soup = BeautifulSoup(item.get_content(), "html.parser")
-            title = soup.title.get_text(strip=True) if soup.title else f"Chapter {item_number}"
-            text = soup.get_text(" ", strip=True)
+            title = (
+                soup.title.get_text(strip=True)
+                if soup.title
+                else getattr(item, "title", "") or f"Chapter {item_number}"
+            )
+            body = soup.body or soup
+            text_parts = [
+                element.get_text(" ", strip=True)
+                for element in body.find_all(["h1", "h2", "h3", "p", "li"])
+                if element.get_text(" ", strip=True)
+            ]
+            text = "\n\n".join(text_parts) or soup.get_text(" ", strip=True)
             if not text:
                 continue
-            rows.append(DocumentRow(item_number, title, text))
+            rows.append(
+                DocumentRow(
+                    item_number,
+                    title,
+                    text,
+                    metadata={
+                        "kind": "chapter",
+                        "chapter_number": item_number,
+                        "file_name": item.get_name(),
+                    },
+                )
+            )
             item_number += 1
         return rows
 
@@ -341,7 +566,14 @@ class DocumentScraper:
                     DocumentRow(
                         item_number,
                         f"{sheet_name} Row {row_index + 1}",
-                        " | ".join(values),
+                        "\n".join(values),
+                        f"Sheet: {sheet_name}\nColumns: {', '.join(map(str, cleaned_frame.columns))}",
+                        {
+                            "kind": "sheet_row",
+                            "sheet_name": str(sheet_name),
+                            "row_number": int(row_index + 1),
+                            "columns": [str(column) for column in cleaned_frame.columns],
+                        },
                     )
                 )
                 item_number += 1
@@ -366,13 +598,28 @@ class DocumentScraper:
                     f"Slide {index}",
                     " ".join(slide_text).strip(),
                     notes_text,
+                    {
+                        "kind": "slide",
+                        "slide_number": index,
+                        "has_notes": bool(notes_text),
+                    },
                 )
             )
         return rows
 
     def _scrape_image(self, path):
         ocr_text = self._perform_ocr_on_image(path)
-        return [DocumentRow(1, path.stem or "Image 1", ocr_text)]
+        return [
+            DocumentRow(
+                1,
+                path.stem or "Image 1",
+                ocr_text,
+                metadata={
+                    "kind": "image",
+                    "extraction": "ocr",
+                },
+            )
+        ]
 
     def _perform_ocr_on_pdf(self, path):
         try:

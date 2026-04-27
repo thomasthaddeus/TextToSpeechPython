@@ -37,6 +37,8 @@ class Ui_MainWindow:
         self.playButton = QPushButton("Generate && Play", self.audioControlsGroup)
         self.generateButton = QPushButton("Generate File", self.audioControlsGroup)
         self.stopButton = QPushButton("Stop", self.audioControlsGroup)
+        self.cancelTaskButton = QPushButton("Cancel Task", self.audioControlsGroup)
+        self.cancelTaskButton.setEnabled(False)
         self.openSecondWindowButton = QPushButton(
             "Import Document",
             self.audioControlsGroup,
@@ -51,6 +53,7 @@ class Ui_MainWindow:
             self.playButton,
             self.generateButton,
             self.stopButton,
+            self.cancelTaskButton,
             self.openSecondWindowButton,
             self.openSettingsButton,
         ):

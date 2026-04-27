@@ -32,9 +32,12 @@ class Ui_Dialog:
         )
         self.browseButton = QPushButton("Browse", dialog)
         self.loadButton = QPushButton("Load", dialog)
+        self.cancelLoadButton = QPushButton("Cancel Load", dialog)
+        self.cancelLoadButton.setEnabled(False)
         path_row.addWidget(self.filePathEdit)
         path_row.addWidget(self.browseButton)
         path_row.addWidget(self.loadButton)
+        path_row.addWidget(self.cancelLoadButton)
         layout.addLayout(path_row)
 
         self.previewLabel = QLabel("Preview", dialog)

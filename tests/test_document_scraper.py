@@ -86,6 +86,7 @@ class DocumentScraperTests(unittest.TestCase):
         self.assertEqual(rows[0]["primary_text"], "First block.")
         self.assertEqual(rows[1]["primary_text"], "Second block.")
         self.assertEqual(rows[0]["source_type"], "txt")
+        self.assertEqual(rows[0]["metadata"], {})
 
     def test_dependency_status_reports_missing_advertised_parser_packages(self):
         missing_modules = {"ebooklib", "striprtf", "xlrd"}
@@ -145,9 +146,32 @@ class DocumentScraperTests(unittest.TestCase):
 
         rows = self.scraper.scrape_file(html_path)
 
-        self.assertGreaterEqual(len(rows), 2)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["title"], "Heading")
         self.assertEqual(rows[0]["source_type"], "html")
         self.assertIn("Heading", rows[0]["primary_text"])
+        self.assertIn("Paragraph two.", rows[0]["primary_text"])
+        self.assertEqual(rows[0]["metadata"]["kind"], "html_section")
+        self.assertEqual(rows[0]["metadata"]["heading_level"], 1)
+
+    def test_scrape_html_preserves_table_rows(self):
+        html_path = self.temp_dir / "table.html"
+        html_path.write_text(
+            (
+                "<html><body>"
+                "<table><tr><th>Step</th><th>Status</th></tr>"
+                "<tr><td>Import</td><td>Ready</td></tr></table>"
+                "</body></html>"
+            ),
+            encoding="utf-8",
+        )
+
+        rows = self.scraper.scrape_file(html_path)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["title"], "Table 1 Row 1")
+        self.assertIn("Step: Import", rows[0]["primary_text"])
+        self.assertEqual(rows[0]["metadata"]["kind"], "table_row")
 
     def test_scrape_docx_extracts_paragraphs(self):
         docx_path = self.temp_dir / "sample.docx"
@@ -161,6 +185,29 @@ class DocumentScraperTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0]["title"], "Paragraph 1")
         self.assertEqual(rows[1]["primary_text"], "Second paragraph.")
+        self.assertEqual(rows[0]["metadata"]["kind"], "paragraph")
+
+    def test_scrape_docx_preserves_headings_and_tables(self):
+        docx_path = self.temp_dir / "structured.docx"
+        document = Document()
+        document.add_heading("Launch Plan", level=1)
+        document.add_paragraph("Prepare the narration script.")
+        table = document.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "Task"
+        table.cell(0, 1).text = "Owner"
+        table.cell(1, 0).text = "Record intro"
+        table.cell(1, 1).text = "Narrator"
+        document.save(docx_path)
+
+        rows = self.scraper.scrape_file(docx_path)
+
+        self.assertEqual(rows[0]["title"], "Launch Plan")
+        self.assertIn("Prepare the narration script.", rows[0]["primary_text"])
+        self.assertEqual(rows[0]["metadata"]["kind"], "section")
+        self.assertEqual(rows[0]["metadata"]["heading_level"], 1)
+        self.assertEqual(rows[1]["title"], "Table 1 Row 1")
+        self.assertIn("Task: Record intro", rows[1]["primary_text"])
+        self.assertEqual(rows[1]["metadata"]["kind"], "table_row")
 
     def test_scrape_pdf_extracts_page_text(self):
         pdf_path = self.temp_dir / "sample.pdf"
@@ -171,6 +218,8 @@ class DocumentScraperTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["title"], "Page 1")
         self.assertIn("Hello PDF", rows[0]["primary_text"])
+        self.assertEqual(rows[0]["metadata"]["kind"], "page")
+        self.assertEqual(rows[0]["metadata"]["extraction"], "text-layer")
 
     @unittest.skipUnless(HAS_STRIPRTF, "striprtf is not installed")
     def test_scrape_rtf_extracts_text(self):
@@ -209,6 +258,8 @@ class DocumentScraperTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["title"], "Chapter 1")
         self.assertIn("EPUB body text.", rows[0]["primary_text"])
+        self.assertEqual(rows[0]["metadata"]["kind"], "chapter")
+        self.assertEqual(rows[0]["metadata"]["chapter_number"], 1)
 
     def test_scrape_csv_extracts_rows(self):
         csv_path = self.temp_dir / "sample.csv"
@@ -221,6 +272,9 @@ class DocumentScraperTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0]["title"], "Sheet1 Row 1")
         self.assertIn("Name: Alice", rows[0]["primary_text"])
+        self.assertIn("Columns: Name, Role", rows[0]["secondary_text"])
+        self.assertEqual(rows[0]["metadata"]["kind"], "sheet_row")
+        self.assertEqual(rows[0]["metadata"]["sheet_name"], "Sheet1")
 
     @unittest.skipUnless(HAS_OPENPYXL, "openpyxl is not installed")
     def test_scrape_xlsx_extracts_rows(self):
@@ -237,6 +291,7 @@ class DocumentScraperTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["title"], "Outline Row 1")
         self.assertIn("Chapter: Intro", rows[0]["primary_text"])
+        self.assertEqual(rows[0]["metadata"]["columns"], ["Chapter", "Pages"])
 
     def test_scrape_pptx_extracts_slide_text_and_notes(self):
         pptx_path = self.temp_dir / "sample.pptx"
@@ -254,6 +309,8 @@ class DocumentScraperTests(unittest.TestCase):
         self.assertEqual(rows[0]["title"], "Slide 1")
         self.assertIn("Slide Heading", rows[0]["primary_text"])
         self.assertIn("Speaker notes.", rows[0]["secondary_text"])
+        self.assertEqual(rows[0]["metadata"]["kind"], "slide")
+        self.assertTrue(rows[0]["metadata"]["has_notes"])
 
     def test_scrape_image_uses_ocr_path(self):
         image_path = self.temp_dir / "sample.png"
@@ -274,6 +331,7 @@ class DocumentScraperTests(unittest.TestCase):
         self.assertEqual(rows[0]["title"], "sample")
         self.assertEqual(rows[0]["primary_text"], "Scanned image text")
         self.assertEqual(rows[0]["source_type"], "png")
+        self.assertEqual(rows[0]["metadata"]["extraction"], "ocr")
 
     def test_scrape_pdf_falls_back_to_ocr_when_text_layer_is_missing(self):
         pdf_path = self.temp_dir / "scanned.pdf"
@@ -293,6 +351,7 @@ class DocumentScraperTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["title"], "Page 1")
         self.assertEqual(rows[0]["primary_text"], "OCR page text")
+        self.assertEqual(rows[0]["metadata"]["extraction"], "ocr")
 
 
 if __name__ == "__main__":

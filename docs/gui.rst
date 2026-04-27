@@ -53,10 +53,13 @@ It provides:
 - item/title column
 - primary text column
 - secondary text column
+- heading-aware rows for structured documents
+- table, spreadsheet, and slide metadata that preserves source context
 - multi-row selection
 - content-mode selection
 - import of selected rows into the main editor
 - batch export of selected rows to one audio file per item
+- cancel controls for active document-load and batch-export work
 
 Currently supported file types include:
 
@@ -86,6 +89,8 @@ Examples:
 - playback volume controls are disabled when multimedia playback support is not
   available
 - the preview button text changes when only file generation is possible
+- long-running document-load and batch-export work exposes cancel controls while
+  the worker is active
 
 Recent Audio History
 --------------------

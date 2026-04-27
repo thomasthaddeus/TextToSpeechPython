@@ -85,6 +85,7 @@ class MainController(QObject):
         self.view.playButton.clicked.connect(self.generate_and_play_audio)
         self.view.generateButton.clicked.connect(self.export_audio_file)
         self.view.stopButton.clicked.connect(self.stop_audio)
+        self.view.cancelTaskButton.clicked.connect(self.cancel_background_work)
         self.view.playbackVolumeSlider.valueChanged.connect(
             self.update_playback_volume
         )
@@ -159,6 +160,7 @@ class MainController(QObject):
         self.view.actionExportAudio.setEnabled(has_text)
         self.view.stopButton.setEnabled(multimedia_available and has_preview_audio)
         self.view.playbackVolumeSlider.setEnabled(multimedia_available)
+        self.view.cancelTaskButton.setEnabled(background_work_active)
 
         if multimedia_available:
             self.view.playButton.setText("Generate && Play")
@@ -178,10 +180,13 @@ class MainController(QObject):
             self.view.generateButton.setEnabled(False)
             self.view.actionExportAudio.setEnabled(False)
             self.view.stopButton.setEnabled(False)
+            self.view.openSecondWindowButton.setEnabled(False)
             self._set_inline_hint(
-                "Background work is running. Generation actions will unlock when it finishes."
+                "Background work is running. Use Cancel Task if you need to stop it."
             )
             return
+
+        self.view.openSecondWindowButton.setEnabled(True)
 
         if not has_text:
             self._set_inline_hint(
@@ -547,10 +552,15 @@ class MainController(QObject):
         self.batch_export_worker.progress.connect(self._handle_batch_export_progress)
         self.batch_export_worker.finished.connect(self._handle_batch_export_finished)
         self.batch_export_worker.failed.connect(self._handle_batch_export_failed)
+        self.batch_export_worker.cancelled.connect(self._handle_batch_export_cancelled)
         self.batch_export_worker.finished.connect(self.batch_export_thread.quit)
         self.batch_export_worker.failed.connect(self.batch_export_thread.quit)
+        self.batch_export_worker.cancelled.connect(self.batch_export_thread.quit)
         self.batch_export_worker.finished.connect(self.batch_export_worker.deleteLater)
         self.batch_export_worker.failed.connect(self.batch_export_worker.deleteLater)
+        self.batch_export_worker.cancelled.connect(
+            self.batch_export_worker.deleteLater
+        )
         self.batch_export_thread.finished.connect(self.batch_export_thread.deleteLater)
         self.batch_export_thread.finished.connect(self._clear_batch_export_worker)
         self.batch_export_thread.start()
@@ -617,11 +627,53 @@ class MainController(QObject):
             f"Unable to finish batch export.\n\n{message}",
         )
 
+    def _handle_batch_export_cancelled(self, exported_files):
+        self.batch_export_active = False
+        exported_paths = [Path(file_path) for file_path in exported_files]
+        for file_path in exported_paths:
+            self.latest_audio_path = str(file_path)
+            self._record_audio_history(file_path, "export")
+
+        self.view.statusbar.showMessage(
+            f"Batch export canceled after {len(exported_paths)} completed file(s)."
+        )
+        QMessageBox.information(
+            self.view,
+            "Batch Export Canceled",
+            f"Created {len(exported_paths)} audio file(s) before cancellation.",
+        )
+        logger.info(
+            "Batch export canceled after {} completed files.",
+            len(exported_paths),
+        )
+
     def _clear_batch_export_worker(self):
         self.batch_export_thread = None
         self.batch_export_worker = None
         self.batch_export_active = False
         self._refresh_action_states()
+
+    def cancel_background_work(self):
+        cancel_requested = False
+
+        if self.batch_export_worker is not None:
+            self.batch_export_worker.request_cancel()
+            cancel_requested = True
+
+        if self.document_parse_worker is not None:
+            self.document_parse_worker.request_cancel()
+            cancel_requested = True
+
+        if not cancel_requested:
+            self.view.statusbar.showMessage("No background task is running.")
+            self._refresh_action_states()
+            return
+
+        self.view.cancelTaskButton.setEnabled(False)
+        self.view.statusbar.showMessage(
+            "Cancel requested. The current worker step will stop when safe."
+        )
+        logger.info("Requested cancellation for active background work.")
 
     def update_playback_volume(self, value):
         self.settings.playback_volume = value
@@ -659,12 +711,19 @@ class MainController(QObject):
             self._handle_document_parse_finished
         )
         self.document_parse_worker.failed.connect(self._handle_document_parse_failed)
+        self.document_parse_worker.cancelled.connect(
+            self._handle_document_parse_cancelled
+        )
         self.document_parse_worker.finished.connect(self.document_parse_thread.quit)
         self.document_parse_worker.failed.connect(self.document_parse_thread.quit)
+        self.document_parse_worker.cancelled.connect(self.document_parse_thread.quit)
         self.document_parse_worker.finished.connect(
             self.document_parse_worker.deleteLater
         )
         self.document_parse_worker.failed.connect(
+            self.document_parse_worker.deleteLater
+        )
+        self.document_parse_worker.cancelled.connect(
             self.document_parse_worker.deleteLater
         )
         self.document_parse_thread.finished.connect(
@@ -705,6 +764,10 @@ class MainController(QObject):
             f"Unable to read the selected document.\n\n{message}",
         )
         self.view.statusbar.showMessage("Document load failed.")
+
+    def _handle_document_parse_cancelled(self):
+        self.view.statusbar.showMessage("Document load canceled.")
+        logger.info("Document load canceled.")
 
     def _clear_document_parse_worker(self):
         self.document_parse_thread = None

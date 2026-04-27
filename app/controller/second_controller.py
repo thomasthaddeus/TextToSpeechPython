@@ -27,6 +27,7 @@ class SecondController(QObject):
         self.load_worker = None
         self.view.browseButton.clicked.connect(self.choose_file)
         self.view.loadButton.clicked.connect(self.load_file)
+        self.view.cancelLoadButton.clicked.connect(self.cancel_load)
         self.view.importButton.clicked.connect(self.import_text)
         self.view.batchExportButton.clicked.connect(self.batch_export)
         self.view.selectAllButton.clicked.connect(self.view.previewTable.selectAll)
@@ -101,10 +102,11 @@ class SecondController(QObject):
             "clearSelectionButton",
         ):
             getattr(self.view, button_name).setEnabled(not is_loading)
+        self.view.cancelLoadButton.setEnabled(is_loading)
 
         if is_loading:
             self.view.infoLabel.setText(
-                "Loading document in the background. You can keep the app open."
+                "Loading document in the background. You can cancel this load if needed."
             )
 
     def _surface_document_dependency_status(self):
@@ -149,14 +151,28 @@ class SecondController(QObject):
         self.load_thread.started.connect(self.load_worker.run)
         self.load_worker.finished.connect(self._handle_load_finished)
         self.load_worker.failed.connect(self._handle_load_failed)
+        self.load_worker.cancelled.connect(self._handle_load_cancelled)
         self.load_worker.finished.connect(self.load_thread.quit)
         self.load_worker.failed.connect(self.load_thread.quit)
+        self.load_worker.cancelled.connect(self.load_thread.quit)
         self.load_worker.finished.connect(self.load_worker.deleteLater)
         self.load_worker.failed.connect(self.load_worker.deleteLater)
+        self.load_worker.cancelled.connect(self.load_worker.deleteLater)
         self.load_thread.finished.connect(self.load_thread.deleteLater)
         self.load_thread.finished.connect(self._clear_load_worker)
         self.load_thread.start()
         logger.info("Started background import for document file {}", file_path)
+
+    def cancel_load(self):
+        if self.load_worker is None:
+            return
+
+        self.load_worker.request_cancel()
+        self.view.cancelLoadButton.setEnabled(False)
+        self.view.infoLabel.setText(
+            "Cancel requested. The current parser step will stop when safe."
+        )
+        logger.info("Requested cancellation for document import.")
 
     def _handle_load_finished(self, extracted_rows):
         self.import_rows = extracted_rows
@@ -179,6 +195,10 @@ class SecondController(QObject):
             "Import Error",
             f"Unable to read the selected document.\n\n{message}",
         )
+
+    def _handle_load_cancelled(self):
+        self.view.infoLabel.setText("Document import canceled.")
+        logger.info("Document import canceled.")
 
     def _clear_load_worker(self):
         self.load_thread = None

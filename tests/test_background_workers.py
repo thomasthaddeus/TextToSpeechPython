@@ -23,7 +23,7 @@ sys.modules.setdefault("azure", azure_module)
 sys.modules.setdefault("azure.cognitiveservices", cognitiveservices_module)
 sys.modules.setdefault("azure.cognitiveservices.speech", speech_module)
 
-from app.controller.background_workers import BatchExportWorker
+from app.controller.background_workers import BatchExportWorker, DocumentParseWorker
 from app.model.app_settings import AppSettings
 
 
@@ -37,6 +37,22 @@ class FakeTTSProcessor:
 
 
 class BackgroundWorkerTests(unittest.TestCase):
+    def test_document_parse_worker_can_cancel_before_parsing(self):
+        cancelled = []
+        finished = []
+        failed = []
+        worker = DocumentParseWorker("does-not-need-to-exist.txt")
+        worker.cancelled.connect(lambda: cancelled.append(True))
+        worker.finished.connect(finished.append)
+        worker.failed.connect(failed.append)
+
+        worker.request_cancel()
+        worker.run()
+
+        self.assertEqual(cancelled, [True])
+        self.assertFalse(finished)
+        self.assertFalse(failed)
+
     def test_batch_export_worker_writes_files_and_reports_progress(self):
         temp_dir = Path("data/dynamic/tmp/batch_worker_test")
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -88,6 +104,63 @@ class BackgroundWorkerTests(unittest.TestCase):
                 b"Unique batch worker sample text",
                 exported_file.read_bytes(),
             )
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_batch_export_worker_can_cancel_between_rows(self):
+        temp_dir = Path("data/dynamic/tmp/batch_worker_cancel_test")
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        rows = [
+            {
+                "item_number": 1,
+                "title": "First",
+                "content_mode": "combine",
+                "resolved_text": "First cancel sample.",
+            },
+            {
+                "item_number": 2,
+                "title": "Second",
+                "content_mode": "combine",
+                "resolved_text": "Second cancel sample.",
+            },
+        ]
+        finished = []
+        cancelled = []
+        progress = []
+
+        try:
+            worker = BatchExportWorker(
+                rows=rows,
+                output_dir=temp_dir,
+                settings=AppSettings(auto_clean_text=False),
+                azure_key="fake-key",
+                azure_region="fake-region",
+            )
+            worker.finished.connect(finished.append)
+            worker.cancelled.connect(cancelled.append)
+
+            def cancel_after_first_file(completed, total, path):
+                progress.append((completed, total, Path(path).name))
+                worker.request_cancel()
+
+            worker.progress.connect(cancel_after_first_file)
+
+            with patch(
+                "app.controller.background_workers.create_tts_processor",
+                lambda azure_key, azure_region: FakeTTSProcessor(
+                    azure_key,
+                    azure_region,
+                ),
+            ):
+                worker.run()
+
+            self.assertFalse(finished)
+            self.assertEqual(progress, [(1, 2, "item_01_first_combine.mp3")])
+            self.assertEqual(len(cancelled), 1)
+            self.assertEqual(len(cancelled[0]), 1)
+            self.assertTrue((temp_dir / "item_01_first_combine.mp3").exists())
+            self.assertFalse((temp_dir / "item_02_second_combine.mp3").exists())
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

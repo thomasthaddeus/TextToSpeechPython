@@ -38,6 +38,20 @@ in the document import dialog. If the active interpreter is missing one of those
 packages, the app shows a startup/import warning and asks you to run
 `poetry install`.
 
+## Version Bumping
+
+To have VS Code commits automatically bump the patch version in
+`pyproject.toml`, install the local pre-commit hook:
+
+```powershell
+.\scripts\version\install_pre_commit_hook.ps1
+```
+
+After installation, commits that include staged changes under `app/`, `docs/`,
+`scripts/`, `tests/`, or `README.md` will bump and stage `pyproject.toml`.
+Commits that already include a staged `pyproject.toml` version change are left
+alone.
+
 ## Running The App
 
 You can launch the application in either of these ways:
@@ -98,6 +112,8 @@ These controls are applied to both the SSML preview and generated audio.
 `Import Document` opens a structured import dialog with:
 
 - a row-based preview of extracted document sections
+- heading-aware rows for DOCX, HTML, and EPUB content where available
+- table and spreadsheet rows that keep sheet, column, and table context
 - multi-row selection
 - content modes:
   - `Prefer Secondary Text`
@@ -109,6 +125,7 @@ From that dialog you can:
 
 - import the selected rows into the main editor
 - batch export the selected rows to one `.mp3` per item
+- cancel active document-load or batch-export work without closing the app
 
 ## Logging
 
