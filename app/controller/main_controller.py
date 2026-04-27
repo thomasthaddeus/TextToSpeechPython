@@ -113,7 +113,7 @@ class MainController(QObject):
         self.view.actionOpenText.triggered.connect(self.open_document_file)
         self.view.actionOpenUrl.triggered.connect(self.open_url_source)
         self.view.actionOpenRawHtml.triggered.connect(self.open_raw_html_source)
-        self.view.actionSaveText.triggered.connect(self.save_text_file)
+        self.view.actionExportEditorText.triggered.connect(self.export_editor_text)
         self.view.actionExportAudio.triggered.connect(self.export_audio_file)
         self.view.actionExit.triggered.connect(self.view.close)
         self.view.actionSettings.triggered.connect(self.open_settings)
@@ -506,22 +506,17 @@ class MainController(QObject):
     def _build_ssml(self, text):
         return build_ssml_document(text, self.settings, self.cleaner)
 
-    def _combine_document_rows(self, rows, content_mode="prefer_notes"):
+    def _combine_document_rows(self, rows, content_mode="prefer_secondary"):
         chunks = []
-        normalized_mode = {
-            "prefer_notes": "prefer_secondary",
-            "notes_only": "secondary_only",
-            "slide_text_only": "primary_only",
-        }.get(content_mode, content_mode)
         for row in rows:
             primary_text = (row.get("primary_text") or "").strip()
             secondary_text = (row.get("secondary_text") or "").strip()
 
-            if normalized_mode == "secondary_only":
+            if content_mode == "secondary_only":
                 resolved_text = secondary_text
-            elif normalized_mode == "primary_only":
+            elif content_mode == "primary_only":
                 resolved_text = primary_text
-            elif normalized_mode == "combine":
+            elif content_mode == "combine":
                 resolved_parts = [part for part in (primary_text, secondary_text) if part]
                 resolved_text = "\n\n".join(resolved_parts)
             else:
@@ -1004,10 +999,10 @@ class MainController(QObject):
         self.document_parse_path = None
         self._refresh_action_states()
 
-    def save_text_file(self):
+    def export_editor_text(self):
         file_path, _ = QFileDialog.getSaveFileName(
             self.view,
-            "Save Editor Text",
+            "Export Editor Text",
             str(Path.cwd() / "speech_input.txt"),
             "Text Files (*.txt);;Markdown Files (*.md);;HTML Files (*.html)",
         )
@@ -1027,8 +1022,10 @@ class MainController(QObject):
 
         with open(file_path, "w", encoding="utf-8") as file:
             file.write(output_text)
-        self.view.statusbar.showMessage(f"Saved editor text to {file_path}")
-        logger.info("Saved editor contents to {}", file_path)
+        self.view.statusbar.showMessage(
+            f"Exported editor text to {file_path}. Source documents are not round-tripped."
+        )
+        logger.info("Exported editor contents to {}", file_path)
 
     def open_settings(self):
         updated_settings = self.settings_controller.edit_settings(self.settings)

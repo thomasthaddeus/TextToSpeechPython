@@ -12,24 +12,24 @@ from loguru import logger
 class SecondController(QObject):
     CONTENT_MODES = {
         "prefer_secondary": {
-            "primary_label": "Primary Text",
-            "secondary_label": "Secondary Text",
-            "label": "Prefer Secondary Text",
+            "primary_label": "Main Text",
+            "secondary_label": "Context",
+            "label": "Prefer Context When Available",
         },
         "secondary_only": {
-            "primary_label": "Primary Text",
-            "secondary_label": "Secondary Text",
-            "label": "Secondary Text Only",
+            "primary_label": "Main Text",
+            "secondary_label": "Context",
+            "label": "Context Only",
         },
         "primary_only": {
-            "primary_label": "Primary Text",
-            "secondary_label": "Secondary Text",
-            "label": "Primary Text Only",
+            "primary_label": "Main Text",
+            "secondary_label": "Context",
+            "label": "Main Text Only",
         },
         "combine": {
-            "primary_label": "Primary Text",
-            "secondary_label": "Secondary Text",
-            "label": "Combine Primary and Secondary Text",
+            "primary_label": "Main Text",
+            "secondary_label": "Context",
+            "label": "Combine Main Text and Context",
         },
     }
     FORMAT_PROFILES = {
@@ -238,13 +238,13 @@ class SecondController(QObject):
         return self.FORMAT_PROFILES.get(
             source_type,
             {
-                "primary_label": "Primary Text",
-                "secondary_label": "Secondary Text",
+                "primary_label": "Main Text",
+                "secondary_label": "Context",
                 "modes": [
-                    ("prefer_secondary", "Prefer Secondary Text"),
-                    ("secondary_only", "Secondary Text Only"),
-                    ("primary_only", "Primary Text Only"),
-                    ("combine", "Combine Primary and Secondary Text"),
+                    ("prefer_secondary", "Prefer Context When Available"),
+                    ("secondary_only", "Context Only"),
+                    ("primary_only", "Main Text Only"),
+                    ("combine", "Combine Main Text and Context"),
                 ],
                 "help": "Select document rows and choose what to import or batch export:",
             },
