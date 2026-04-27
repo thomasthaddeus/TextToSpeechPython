@@ -77,7 +77,7 @@ class BackgroundWorkerTests(unittest.TestCase):
         rows = [
             {
                 "item_number": 1,
-                "title": "Opening Notes",
+                "title": "Opening Context",
                 "content_mode": "combine",
                 "resolved_text": "Unique batch worker sample text.",
             }
@@ -114,8 +114,8 @@ class BackgroundWorkerTests(unittest.TestCase):
             self.assertFalse(failed)
             self.assertEqual(len(finished), 1)
             self.assertEqual(len(finished[0]), 1)
-            self.assertEqual(progress, [(1, 1, "item_01_opening_notes_combine.mp3")])
-            exported_file = temp_dir / "item_01_opening_notes_combine.mp3"
+            self.assertEqual(progress, [(1, 1, "item_01_opening_context_combine.mp3")])
+            exported_file = temp_dir / "item_01_opening_context_combine.mp3"
             self.assertTrue(exported_file.exists())
             self.assertIn(
                 b"Unique batch worker sample text",

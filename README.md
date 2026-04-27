@@ -18,6 +18,7 @@ The current application supports:
 - direct import of web URLs and pasted raw HTML through the same document
   extraction path
 - selective import of extracted document sections into the main editor
+- editor-text export to `.txt`, `.md`, or generated `.html`
 - batch export of selected imported rows to one audio file per item
 - actionable recent audio history in the main window
 
@@ -96,6 +97,14 @@ GUI settings take precedence over `.env` when both are present.
 3. Review the generated SSML preview.
 4. Use `Generate & Play` for a temporary preview file or `Generate File` to export an `.mp3`.
 5. Review, replay, copy, reopen, or restore previous work from the `Recent Audio` panel.
+
+## Editor Text Export
+
+`File > Export Editor Text` writes the current editor contents to `.txt`, `.md`,
+or generated `.html`. This is an editor export, not a document round-trip save:
+opened/imported `.docx`, `.pdf`, `.pptx`, spreadsheets, URLs, and other sources
+are converted into editable narration text and are not saved back to their
+original structured format.
 
 ## Advanced SSML Controls
 
@@ -179,6 +188,8 @@ The app writes runtime artifacts under `data/dynamic/`, including:
   the preview action accordingly.
 - If a parser package for an advertised document format is missing, the app
   reports that clearly instead of failing with a raw import error.
+- `Export Editor Text` only exports the current narration editor contents; it
+  does not preserve or overwrite the original imported document format.
 - Preview audio files are temporary and cleaned up automatically.
 
 ## Project Layout
@@ -198,6 +209,8 @@ The repo currently includes focused regression tests for:
 - audio history persistence
 - document import content-mode resolution
 - normalized document scraping and dependency checks for supported import formats
+- PyQt interaction flows for main-window menu actions, history affordances, and
+  import-dialog selection/import behavior
 
 Run them with:
 

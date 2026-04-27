@@ -47,14 +47,14 @@ class ViewStub:
 
 
 class SecondControllerImportTests(unittest.TestCase):
-    def _controller(self, mode_text="Prefer Secondary Text"):
+    def _controller(self, mode_text="Prefer Context When Available"):
         controller = SecondController.__new__(SecondController)
         controller.view = ViewStub(mode_text)
         controller.current_mode_map = {
-            "Prefer Secondary Text": "prefer_secondary",
-            "Secondary Text Only": "secondary_only",
-            "Primary Text Only": "primary_only",
-            "Combine Primary and Secondary Text": "combine",
+            "Prefer Context When Available": "prefer_secondary",
+            "Context Only": "secondary_only",
+            "Main Text Only": "primary_only",
+            "Combine Main Text and Context": "combine",
             "Prefer Speaker Notes": "prefer_secondary",
             "Speaker Notes Only": "secondary_only",
             "Slide Text Only": "primary_only",
@@ -65,13 +65,13 @@ class SecondControllerImportTests(unittest.TestCase):
         return controller
 
     def test_build_import_payload_prefers_secondary_with_primary_fallback(self):
-        controller = self._controller("Prefer Secondary Text")
+        controller = self._controller("Prefer Context When Available")
         selected_rows = [
             {
                 "item_number": 1,
                 "title": "Item 1",
                 "primary_text": "Primary summary",
-                "secondary_text": "Secondary notes",
+                "secondary_text": "Context notes",
             },
             {
                 "item_number": 2,
@@ -84,12 +84,12 @@ class SecondControllerImportTests(unittest.TestCase):
         payload_rows, imported_text = controller._build_import_payload(selected_rows)
 
         self.assertEqual(len(payload_rows), 2)
-        self.assertEqual(payload_rows[0]["resolved_text"], "Secondary notes")
+        self.assertEqual(payload_rows[0]["resolved_text"], "Context notes")
         self.assertEqual(payload_rows[1]["resolved_text"], "Only primary text")
-        self.assertEqual(imported_text, "Secondary notes\n\nOnly primary text")
+        self.assertEqual(imported_text, "Context notes\n\nOnly primary text")
 
-    def test_build_import_payload_combines_primary_and_secondary_text(self):
-        controller = self._controller("Combine Primary and Secondary Text")
+    def test_build_import_payload_combines_main_text_and_context(self):
+        controller = self._controller("Combine Main Text and Context")
         selected_rows = [
             {
                 "item_number": 3,
@@ -146,6 +146,20 @@ class SecondControllerImportTests(unittest.TestCase):
         self.assertEqual(
             controller.current_mode_map["Include Sheet and Column Context"],
             "combine",
+        )
+
+    def test_unknown_format_uses_generic_document_terms(self):
+        controller = self._controller("")
+
+        controller._apply_format_profile("unknown")
+
+        self.assertEqual(
+            controller.view.previewTable.headers,
+            ["Item", "Main Text", "Context"],
+        )
+        self.assertIn(
+            "Prefer Context When Available",
+            controller.view.contentModeComboBox.items,
         )
 
 

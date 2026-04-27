@@ -13,6 +13,8 @@ The main window includes:
 - a read-only SSML preview panel
 - action buttons for preview, cleaning, generation, export-related flow, and
   document import
+- a File menu action for exporting the current editor text to text, Markdown,
+  or generated HTML
 - a playback volume control
 - an inline guidance label for disabled or unavailable states
 - a recent audio history panel
@@ -52,8 +54,8 @@ preview.
 It provides:
 
 - item/title column
-- primary text column
-- secondary text column
+- main text column
+- context column
 - heading-aware rows for structured documents
 - table, spreadsheet, and slide metadata that preserves source context
 - format-aware labels and content-mode options for pages, slides, chapters,
@@ -85,6 +87,14 @@ document. If the active environment is missing a package required by an
 advertised format, the UI reports that clearly and points back to
 ``poetry install``.
 
+Editor Text Export
+------------------
+
+``File > Export Editor Text`` writes the current narration editor contents to
+``.txt``, ``.md``, or generated ``.html``. It does not overwrite or preserve the
+original structure of imported source documents. Multi-format document import
+is a text extraction workflow, not a round-trip document editor.
+
 Validation And Action States
 ----------------------------
 
@@ -99,6 +109,10 @@ Examples:
 - the preview button text changes when only file generation is possible
 - long-running document-load and batch-export work exposes cancel controls while
   the worker is active
+
+Automated Qt interaction tests cover main-window menu actions, recent-audio
+history affordances, import-dialog loading states, loaded-row selection, and
+selected-row import signal emission.
 
 Recent Audio History
 --------------------

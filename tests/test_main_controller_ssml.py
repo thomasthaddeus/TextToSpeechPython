@@ -1,6 +1,9 @@
 import unittest
 import sys
 import types
+import shutil
+from pathlib import Path
+from unittest.mock import patch
 
 speechsdk = types.SimpleNamespace(
     SpeechConfig=object,
@@ -100,6 +103,9 @@ class TextEditStub:
     def toPlainText(self):
         return self._text
 
+    def setPlainText(self, text):
+        self._text = text
+
 
 class LabelStub:
     def __init__(self):
@@ -107,6 +113,14 @@ class LabelStub:
 
     def setText(self, value):
         self.text = value
+
+
+class StatusBarStub:
+    def __init__(self):
+        self.message = ""
+
+    def showMessage(self, message):
+        self.message = message
 
 
 class ActionStateViewStub:
@@ -122,6 +136,12 @@ class ActionStateViewStub:
         self.openSecondWindowButton = ToggleStub()
         self.playbackVolumeSlider = ToggleStub()
         self.actionHintLabel = LabelStub()
+
+
+class SaveExportViewStub:
+    def __init__(self, text):
+        self.textEdit = TextEditStub(text)
+        self.statusbar = StatusBarStub()
 
 
 class MainControllerActionStateTests(unittest.TestCase):
@@ -176,6 +196,31 @@ class MainControllerActionStateTests(unittest.TestCase):
         self.assertFalse(controller.view.stopButton.enabled)
         self.assertFalse(controller.view.playbackVolumeSlider.enabled)
         self.assertIn("playback controls are disabled", controller.view.actionHintLabel.text)
+
+
+class MainControllerEditorExportTests(unittest.TestCase):
+    def test_export_editor_text_exports_html_without_round_tripping_source_document(self):
+        temp_dir = Path("data/dynamic/tmp/editor_export_test")
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            output_path = temp_dir / "editor_export.html"
+            controller = MainController.__new__(MainController)
+            controller.view = SaveExportViewStub("Fish & Chips\n<tag>")
+
+            with patch(
+                "app.controller.main_controller.QFileDialog.getSaveFileName",
+                return_value=(str(output_path), "HTML Files (*.html)"),
+            ):
+                controller.export_editor_text()
+
+            exported_text = output_path.read_text(encoding="utf-8")
+            self.assertIn("Fish &amp; Chips", exported_text)
+            self.assertIn("&lt;tag&gt;", exported_text)
+            self.assertIn("Exported editor text", controller.view.statusbar.message)
+            self.assertIn("not round-tripped", controller.view.statusbar.message)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

@@ -63,7 +63,7 @@ class Ui_Dialog:
 
         self.previewTable = QTableWidget(0, 3, dialog)
         self.previewTable.setHorizontalHeaderLabels(
-            ["Item", "Primary Text", "Secondary Text"]
+            ["Item", "Main Text", "Context"]
         )
         self.previewTable.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
