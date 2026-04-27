@@ -17,6 +17,7 @@ The main window includes:
 - an inline guidance label for disabled or unavailable states
 - a recent audio history panel
 - a menu bar with file, tools, and help actions
+- quick source import actions for local documents, URLs, and pasted raw HTML
 
 Settings Dialog
 ---------------
@@ -55,6 +56,8 @@ It provides:
 - secondary text column
 - heading-aware rows for structured documents
 - table, spreadsheet, and slide metadata that preserves source context
+- format-aware labels and content-mode options for pages, slides, chapters,
+  OCR text, and spreadsheet rows
 - multi-row selection
 - content-mode selection
 - import of selected rows into the main editor
@@ -71,6 +74,11 @@ Currently supported file types include:
 - ``.epub``
 - ``.xlsx`` / ``.xls`` / ``.csv``
 - ``.pptx``
+
+The main window additionally supports ``File > Open URL`` and
+``File > Import Raw HTML``. Both flows parse the source through the same
+structured HTML scraper used for local ``.html`` and ``.htm`` files before
+placing the resolved text in the editor.
 
 The app checks parser dependency availability at startup and before loading a
 document. If the active environment is missing a package required by an
@@ -102,5 +110,12 @@ The main window tracks recent generated audio items and displays:
 - voice
 - filename
 - output path
+
+History items are actionable:
+
+- double-click a generated audio item to replay it
+- right-click to open the containing folder
+- right-click to copy the audio path
+- right-click to restore the source text and generation settings snapshot
 
 History is persisted to ``data/dynamic/audio_history.json``.

@@ -18,6 +18,27 @@ HAS_OPENPYXL = importlib.util.find_spec("openpyxl") is not None
 HAS_STRIPRTF = importlib.util.find_spec("striprtf") is not None
 
 
+class FakeHeaders:
+    def get_content_charset(self):
+        return "utf-8"
+
+
+class FakeUrlResponse:
+    headers = FakeHeaders()
+
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def read(self):
+        return self.body
+
+
 def build_pdf_bytes(text):
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
@@ -172,6 +193,45 @@ class DocumentScraperTests(unittest.TestCase):
         self.assertEqual(rows[0]["title"], "Table 1 Row 1")
         self.assertIn("Step: Import", rows[0]["primary_text"])
         self.assertEqual(rows[0]["metadata"]["kind"], "table_row")
+
+    def test_scrape_html_text_extracts_pasted_html_sections(self):
+        rows = self.scraper.scrape_html_text(
+            (
+                "<html><head><title>Pasted Source</title></head><body>"
+                "<h2>Raw HTML Heading</h2><p>Unique pasted HTML body.</p>"
+                "</body></html>"
+            )
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["title"], "Raw HTML Heading")
+        self.assertEqual(rows[0]["source_path"], "raw-html")
+        self.assertEqual(rows[0]["source_type"], "html")
+        self.assertIn("Unique pasted HTML body.", rows[0]["primary_text"])
+
+    def test_scrape_url_fetches_and_scrapes_html(self):
+        html = (
+            "<html><head><title>Remote Source</title></head><body>"
+            "<h1>Remote Heading</h1><p>Unique URL imported body.</p>"
+            "</body></html>"
+        ).encode("utf-8")
+
+        with patch(
+            "app.model.scraper.document_scraper.urlopen",
+            return_value=FakeUrlResponse(html),
+        ) as mocked_urlopen:
+            rows = self.scraper.scrape_url("https://example.test/article")
+
+        mocked_urlopen.assert_called_once()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["title"], "Remote Heading")
+        self.assertEqual(rows[0]["source_path"], "https://example.test/article")
+        self.assertEqual(rows[0]["source_type"], "url")
+        self.assertIn("Unique URL imported body.", rows[0]["primary_text"])
+
+    def test_scrape_url_rejects_non_web_schemes(self):
+        with self.assertRaisesRegex(ValueError, "http or https"):
+            self.scraper.scrape_url("file:///tmp/example.html")
 
     def test_scrape_docx_extracts_paragraphs(self):
         docx_path = self.temp_dir / "sample.docx"

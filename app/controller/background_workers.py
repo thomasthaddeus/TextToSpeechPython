@@ -64,15 +64,16 @@ def build_ssml_document(text, settings, cleaner=None):
 
 
 class DocumentParseWorker(QObject):
-    """Parse a document away from the UI thread."""
+    """Parse a document or source payload away from the UI thread."""
 
     finished = pyqtSignal(object)
     failed = pyqtSignal(str)
     cancelled = pyqtSignal()
 
-    def __init__(self, file_path):
+    def __init__(self, source, source_kind="file"):
         super().__init__()
-        self.file_path = file_path
+        self.source = source
+        self.source_kind = source_kind
         self._cancel_requested = False
 
     def request_cancel(self):
@@ -84,9 +85,21 @@ class DocumentParseWorker(QObject):
             return
 
         try:
-            rows = DocumentScraper().scrape_file(self.file_path)
+            scraper = DocumentScraper()
+            if self.source_kind == "file":
+                rows = scraper.scrape_file(self.source)
+            elif self.source_kind == "url":
+                rows = scraper.scrape_url(self.source)
+            elif self.source_kind == "html":
+                rows = scraper.scrape_html_text(self.source)
+            else:
+                raise ValueError(f"Unsupported document source: {self.source_kind}")
         except Exception as error:
-            logger.exception("Document parsing failed for {}: {}", self.file_path, error)
+            logger.exception(
+                "Document parsing failed for {} source: {}",
+                self.source_kind,
+                error,
+            )
             self.failed.emit(str(error))
             return
 
@@ -152,7 +165,9 @@ class BatchExportWorker(QObject):
                     self.cancelled.emit(exported_files)
                     return
 
-                mode_name = sanitize_batch_name(row.get("content_mode", "prefer_notes"))
+                mode_name = sanitize_batch_name(
+                    row.get("content_mode", "prefer_secondary")
+                )
                 title_name = sanitize_batch_name(
                     row.get("title", f"item_{row.get('item_number', 0)}")
                 )

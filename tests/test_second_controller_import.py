@@ -4,22 +4,64 @@ from app.controller.second_controller import SecondController
 
 
 class ComboBoxStub:
-    def __init__(self, text):
+    def __init__(self, text=""):
+        self.items = []
         self._text = text
 
     def currentText(self):
         return self._text
 
+    def clear(self):
+        self.items.clear()
+
+    def addItem(self, text):
+        self.items.append(text)
+        if not self._text:
+            self._text = text
+
+    def setCurrentText(self, text):
+        self._text = text
+
+
+class LabelStub:
+    def __init__(self):
+        self.text = ""
+
+    def setText(self, text):
+        self.text = text
+
+
+class TableStub:
+    def __init__(self):
+        self.headers = []
+
+    def setHorizontalHeaderLabels(self, labels):
+        self.headers = labels
+
 
 class ViewStub:
     def __init__(self, mode_text):
         self.contentModeComboBox = ComboBoxStub(mode_text)
+        self.previewTable = TableStub()
+        self.selectionHelpLabel = LabelStub()
 
 
 class SecondControllerImportTests(unittest.TestCase):
     def _controller(self, mode_text="Prefer Secondary Text"):
         controller = SecondController.__new__(SecondController)
         controller.view = ViewStub(mode_text)
+        controller.current_mode_map = {
+            "Prefer Secondary Text": "prefer_secondary",
+            "Secondary Text Only": "secondary_only",
+            "Primary Text Only": "primary_only",
+            "Combine Primary and Secondary Text": "combine",
+            "Prefer Speaker Notes": "prefer_secondary",
+            "Speaker Notes Only": "secondary_only",
+            "Slide Text Only": "primary_only",
+            "Combine Slide Text and Speaker Notes": "combine",
+            "Row Text Only": "primary_only",
+            "Include Sheet and Column Context": "combine",
+        }
         return controller
 
     def test_build_import_payload_prefers_secondary_with_primary_fallback(self):
@@ -65,6 +107,46 @@ class SecondControllerImportTests(unittest.TestCase):
             "Agenda\n\nLonger narration",
         )
         self.assertEqual(imported_text, "Agenda\n\nLonger narration")
+
+    def test_apply_format_profile_uses_slide_specific_terms_for_pptx(self):
+        controller = self._controller("")
+
+        controller._apply_format_profile("pptx")
+
+        self.assertEqual(
+            controller.view.previewTable.headers,
+            ["Item", "Slide Text", "Speaker Notes"],
+        )
+        self.assertIn("Speaker Notes Only", controller.view.contentModeComboBox.items)
+        self.assertIn("slides", controller.view.selectionHelpLabel.text)
+
+    def test_apply_format_profile_uses_page_terms_for_pdf(self):
+        controller = self._controller("")
+
+        controller._apply_format_profile("pdf")
+
+        self.assertEqual(
+            controller.view.previewTable.headers,
+            ["Item", "Page Text", "Page Context"],
+        )
+        self.assertEqual(
+            controller.current_mode_map["Page Text Only"],
+            "primary_only",
+        )
+
+    def test_apply_format_profile_uses_spreadsheet_terms_for_xlsx(self):
+        controller = self._controller("")
+
+        controller._apply_format_profile("xlsx")
+
+        self.assertEqual(
+            controller.view.previewTable.headers,
+            ["Item", "Row Text", "Sheet / Column Context"],
+        )
+        self.assertEqual(
+            controller.current_mode_map["Include Sheet and Column Context"],
+            "combine",
+        )
 
 
 if __name__ == "__main__":

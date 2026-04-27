@@ -15,9 +15,11 @@ The current application supports:
   playback volume, and advanced SSML controls
 - document import for `.txt`, `.docx`, `.pdf`, `.html`, `.htm`, `.rtf`,
   `.epub`, `.xlsx`, `.xls`, `.csv`, and `.pptx`
+- direct import of web URLs and pasted raw HTML through the same document
+  extraction path
 - selective import of extracted document sections into the main editor
 - batch export of selected imported rows to one audio file per item
-- recent audio history in the main window
+- actionable recent audio history in the main window
 
 ## Requirements
 
@@ -88,11 +90,12 @@ GUI settings take precedence over `.env` when both are present.
 
 ## Main Workflow
 
-1. Paste text into the editor, or import content from `Import Document`.
+1. Paste text into the editor, open a local document, open a URL, import raw
+   HTML, or use `Import Document` for row-based selection.
 2. Open `Tools > Settings` to configure Azure, voice, output directory, and SSML options.
 3. Review the generated SSML preview.
 4. Use `Generate & Play` for a temporary preview file or `Generate File` to export an `.mp3`.
-5. Review recent generated files in the `Recent Audio` panel.
+5. Review, replay, copy, reopen, or restore previous work from the `Recent Audio` panel.
 
 ## Advanced SSML Controls
 
@@ -114,18 +117,21 @@ These controls are applied to both the SSML preview and generated audio.
 - a row-based preview of extracted document sections
 - heading-aware rows for DOCX, HTML, and EPUB content where available
 - table and spreadsheet rows that keep sheet, column, and table context
+- format-aware column labels and import modes, such as slide notes, page text,
+  chapter text, OCR text, or spreadsheet row context
 - multi-row selection
-- content modes:
-  - `Prefer Secondary Text`
-  - `Secondary Text Only`
-  - `Primary Text Only`
-  - `Combine Primary and Secondary Text`
+- content modes that adapt to the loaded format, such as page text, slide
+  notes, chapter text, OCR text, or spreadsheet row context
 
 From that dialog you can:
 
 - import the selected rows into the main editor
 - batch export the selected rows to one `.mp3` per item
 - cancel active document-load or batch-export work without closing the app
+
+The main window also supports quick source import from `File > Open Document`,
+`File > Open URL`, and `File > Import Raw HTML`. URL and raw HTML imports are
+parsed as structured HTML sections before being placed in the editor.
 
 ## Logging
 
@@ -140,6 +146,20 @@ Log timestamps use:
 ```text
 YYYYMMDDHHmmss
 ```
+
+## Recent Audio History
+
+The `Recent Audio` panel keeps the latest generated files and supports workflow
+actions:
+
+- double-click a history item to replay it
+- right-click to open the containing folder
+- right-click to copy the generated audio path
+- right-click to restore the source text and voice/settings snapshot used for
+  that generation
+
+New history entries include the editor text and relevant synthesis settings so
+recent exports can be reused without manually reconstructing the previous setup.
 
 ## Runtime Data
 
@@ -163,12 +183,12 @@ The app writes runtime artifacts under `data/dynamic/`, including:
 
 ## Project Layout
 
-- [app/main.py](D:/Projects/TextToSpeechPython/app/main.py): application entrypoint
-- [app/gui](D:/Projects/TextToSpeechPython/app/gui): in-repo Qt UI modules and dialogs
-- [app/controller](D:/Projects/TextToSpeechPython/app/controller): GUI orchestration and workflow logic
-- [app/model](D:/Projects/TextToSpeechPython/app/model): settings, Azure wrappers, SSML helpers, and scrapers
-- [docs](D:/Projects/TextToSpeechPython/docs): supporting documentation
-- [tests](D:/Projects/TextToSpeechPython/tests): focused regression tests
+- [app/main.py](app/main.py): application entrypoint
+- [app/gui](app/gui): in-repo Qt UI modules and dialogs
+- [app/controller](app/controller): GUI orchestration and workflow logic
+- [app/model](app/model): settings, Azure wrappers, SSML helpers, and scrapers
+- [docs](docs): supporting documentation
+- [tests](tests): focused regression tests
 
 ## Verification
 

@@ -119,7 +119,13 @@ class Ui_MainWindow:
         self.historyList = QListWidget(self.historyGroup)
         self.historyList.setAlternatingRowColors(True)
         self.historyList.setSelectionMode(
-            QListWidget.SelectionMode.NoSelection
+            QListWidget.SelectionMode.SingleSelection
+        )
+        self.historyList.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self.historyList.setToolTip(
+            "Double-click generated audio to play it, or right-click for history actions."
         )
         self.historyGroup.setMaximumHeight(170)
         history_layout.addWidget(self.historyList)
@@ -132,6 +138,8 @@ class Ui_MainWindow:
         self.menuTools = QMenu("Tools", self.menubar)
         self.menuHelp = QMenu("Help", self.menubar)
         self.actionOpenText = QAction("Open Document", main_window)
+        self.actionOpenUrl = QAction("Open URL", main_window)
+        self.actionOpenRawHtml = QAction("Import Raw HTML", main_window)
         self.actionSaveText = QAction("Save Editor Text", main_window)
         self.actionExportAudio = QAction("Export Audio", main_window)
         self.actionExit = QAction("Exit", main_window)
@@ -140,6 +148,8 @@ class Ui_MainWindow:
         self.actionAbout = QAction("About", main_window)
 
         self.menuFile.addAction(self.actionOpenText)
+        self.menuFile.addAction(self.actionOpenUrl)
+        self.menuFile.addAction(self.actionOpenRawHtml)
         self.menuFile.addAction(self.actionSaveText)
         self.menuFile.addAction(self.actionExportAudio)
         self.menuFile.addSeparator()
