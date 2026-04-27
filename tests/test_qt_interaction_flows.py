@@ -1,9 +1,11 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QMainWindow
 
+from app.controller.main_controller import MainController
 from app.controller.second_controller import SecondController
 from app.gui.second_window import SecondApp
 from app.gui.ui_main_window import Ui_MainWindow
+from app.model.app_settings import AppSettings
 
 
 def test_file_menu_exposes_source_and_export_actions(qtbot):
@@ -38,6 +40,82 @@ def test_history_list_is_actionable_from_real_widget(qtbot):
     assert ui.historyList.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
     assert "Double-click" in ui.historyList.toolTip()
     assert "right-click" in ui.historyList.toolTip()
+    assert ui.historyTitleLabel.text() == "Recent Audio"
+    assert ui.historyToggleButton.text() == "-"
+
+
+def test_recent_audio_toggle_collapses_and_expands_panel(qtbot):
+    window = QMainWindow()
+    qtbot.addWidget(window)
+    ui = Ui_MainWindow()
+    ui.setupUi(window)
+    controller = MainController.__new__(MainController)
+    controller.view = ui
+    window.show()
+    qtbot.waitExposed(window)
+
+    controller.toggle_recent_audio()
+
+    assert ui.historyList.isHidden()
+    assert ui.historyToggleButton.text() == "+"
+    assert "Expand" in ui.historyToggleButton.toolTip()
+    assert ui.historyGroup.maximumHeight() == 48
+    assert ui.historyGroup.minimumHeight() == 48
+    assert ui.historyTitleLabel.isVisible()
+
+    controller.toggle_recent_audio()
+
+    assert not ui.historyList.isHidden()
+    assert ui.historyToggleButton.text() == "-"
+    assert "Collapse" in ui.historyToggleButton.toolTip()
+    assert ui.historyGroup.maximumHeight() == 170
+
+
+def test_output_summary_is_right_aligned_statusbar_text(qtbot):
+    window = QMainWindow()
+    qtbot.addWidget(window)
+    ui = Ui_MainWindow()
+    ui.setupUi(window)
+    window.resize(1200, 620)
+    window.show()
+    qtbot.waitExposed(window)
+
+    assert ui.settingsSidebar.isHidden()
+    assert ui.outputStatusLabel.parent() == ui.statusbar
+    assert ui.outputStatusLabel.alignment() & Qt.AlignmentFlag.AlignRight
+    assert "Voice:" in ui.outputStatusLabel.text()
+    assert ui.outputStatusLabel.width() > ui.statusbar.width() // 2
+
+
+def test_settings_sidebar_toggle_and_apply_uses_main_window_editor(qtbot):
+    window = QMainWindow()
+    qtbot.addWidget(window)
+    ui = Ui_MainWindow()
+    ui.setupUi(window)
+    controller = MainController.__new__(MainController)
+    controller.view = ui
+    controller.settings = AppSettings(
+        voice="en-US-GuyNeural",
+        output_dir="data/dynamic/audio",
+    )
+    applied_settings = []
+    controller._apply_updated_settings = applied_settings.append
+
+    controller.toggle_settings_sidebar()
+
+    assert not ui.settingsSidebar.isHidden()
+    assert ui.openSettingsButton.text() == "Hide Settings"
+
+    ui.sidebarSettingsEditor.rate_combo.setCurrentText("slow")
+    controller.apply_sidebar_settings()
+
+    assert applied_settings
+    assert applied_settings[-1].speaking_rate == "slow"
+
+    controller.hide_settings_sidebar()
+
+    assert ui.settingsSidebar.isHidden()
+    assert ui.openSettingsButton.text() == "Settings"
 
 
 def test_loading_state_toggles_real_import_dialog_buttons(qtbot):

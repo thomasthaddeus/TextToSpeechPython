@@ -3,6 +3,7 @@ from pathlib import Path
 import tempfile
 from datetime import datetime
 from xml.sax.saxutils import escape
+from loguru import logger
 
 from PyQt6.QtCore import QObject, Qt, QThread, QUrl
 from PyQt6.QtGui import QDesktopServices
@@ -37,7 +38,6 @@ from app.model.scraper.document_scraper import DocumentScraper
 from app.model.ssml.ssml_config import SSMLConfig
 from app.utils.logging_config import configure_logging
 from app.utils.text_cleaner import TextCleaner
-from loguru import logger
 
 
 class MainController(QObject):
@@ -100,7 +100,7 @@ class MainController(QObject):
 
     def _connect_signals(self):
         self.view.openSecondWindowButton.clicked.connect(self.open_second_window)
-        self.view.openSettingsButton.clicked.connect(self.open_settings)
+        self.view.openSettingsButton.clicked.connect(self.toggle_settings_sidebar)
         self.view.previewButton.clicked.connect(self.update_ssml_preview)
         self.view.cleanTextButton.clicked.connect(self.clean_text)
         self.view.playButton.clicked.connect(self.generate_and_play_audio)
@@ -116,7 +116,7 @@ class MainController(QObject):
         self.view.actionExportEditorText.triggered.connect(self.export_editor_text)
         self.view.actionExportAudio.triggered.connect(self.export_audio_file)
         self.view.actionExit.triggered.connect(self.view.close)
-        self.view.actionSettings.triggered.connect(self.open_settings)
+        self.view.actionSettings.triggered.connect(self.toggle_settings_sidebar)
         self.view.actionOpenScraper.triggered.connect(self.open_second_window)
         self.view.actionAbout.triggered.connect(self.show_about)
         self.view.textEdit.textChanged.connect(self._handle_editor_text_changed)
@@ -126,26 +126,34 @@ class MainController(QObject):
         self.view.historyList.customContextMenuRequested.connect(
             self.show_history_context_menu
         )
+        self.view.historyToggleButton.clicked.connect(self.toggle_recent_audio)
+        self.view.applySidebarSettingsButton.clicked.connect(
+            self.apply_sidebar_settings
+        )
+        self.view.collapseSettingsSidebarButton.clicked.connect(
+            self.hide_settings_sidebar
+        )
 
     def _sanitize_batch_name(self, value):
         return sanitize_batch_name(value)
 
     def _refresh_ui_state(self):
         self._updating_ui_state = True
-        self.view.voiceSummaryLabel.setText(f"Voice: {self.settings.voice}")
-        self.view.rateSummaryLabel.setText(
-            f"Rate: {self.settings.speaking_rate}"
-        )
-        self.view.volumeSummaryLabel.setText(
-            f"Speech Volume: {self.settings.synthesis_volume}"
-        )
-        self.view.outputSummaryLabel.setText(
-            f"Output: {self.settings.output_dir}"
+        self.view.outputStatusLabel.setText(
+            " | ".join(
+                (
+                    f"Voice: {self.settings.voice}",
+                    f"Rate: {self.settings.speaking_rate}",
+                    f"Speech Volume: {self.settings.synthesis_volume}",
+                    f"Output: {self.settings.output_dir}",
+                )
+            )
         )
         self.view.playbackVolumeSlider.setValue(self.settings.playback_volume)
         self.view.playbackVolumeValueLabel.setText(
             f"{self.settings.playback_volume}%"
         )
+        self.view.sidebarSettingsEditor.set_settings(self.settings)
         self._refresh_action_states()
         azure_key, azure_region = self._resolve_azure_credentials()
         if azure_key and azure_region:
@@ -318,6 +326,26 @@ class MainController(QObject):
             )
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self.view.historyList.addItem(item)
+
+    def toggle_recent_audio(self):
+        should_expand = self.view.historyList.isHidden()
+        self.view.historyList.setVisible(should_expand)
+
+        if should_expand:
+            self.view.historyToggleButton.setText("-")
+            self.view.historyToggleButton.setToolTip("Collapse Recent Audio")
+            self.view.historyGroup.setMaximumHeight(170)
+            self.view.historyGroup.setMinimumHeight(48)
+            self.view.statusbar.showMessage("Recent audio expanded.")
+            logger.info("Expanded recent audio panel.")
+            return
+
+        self.view.historyToggleButton.setText("+")
+        self.view.historyToggleButton.setToolTip("Expand Recent Audio")
+        self.view.historyGroup.setMaximumHeight(48)
+        self.view.historyGroup.setMinimumHeight(48)
+        self.view.statusbar.showMessage("Recent audio collapsed.")
+        logger.info("Collapsed recent audio panel.")
 
     def _history_settings_snapshot(self):
         return {
@@ -575,8 +603,8 @@ class MainController(QObject):
                 "Azure Setup Required",
                 (
                     "The application could not find valid Azure Speech credentials.\n\n"
-                    "Open Tools > Settings and enter your Azure key and region, "
-                    "or create a valid .env file."
+                    "Open Tools > Settings, enter your Azure key and region, "
+                    "and click Apply, or create a valid .env file."
                 ),
             )
             self.view.statusbar.showMessage(
@@ -695,8 +723,8 @@ class MainController(QObject):
                 "Azure Setup Required",
                 (
                     "The application could not find valid Azure Speech credentials.\n\n"
-                    "Open Tools > Settings and enter your Azure key and region, "
-                    "or create a valid .env file."
+                    "Open Tools > Settings, enter your Azure key and region, "
+                    "and click Apply, or create a valid .env file."
                 ),
             )
             self.view.statusbar.showMessage(
@@ -1027,8 +1055,7 @@ class MainController(QObject):
         )
         logger.info("Exported editor contents to {}", file_path)
 
-    def open_settings(self):
-        updated_settings = self.settings_controller.edit_settings(self.settings)
+    def _apply_updated_settings(self, updated_settings):
         if updated_settings is None:
             return
 
@@ -1041,6 +1068,37 @@ class MainController(QObject):
         self.view.statusbar.showMessage("Settings updated.")
         if self.settings.logging_enabled and log_file is not None:
             logger.info("Settings updated and logging enabled at {}", log_file)
+
+    def open_settings(self):
+        updated_settings = self.settings_controller.edit_settings(self.settings)
+        self._apply_updated_settings(updated_settings)
+
+    def toggle_settings_sidebar(self):
+        if self.view.settingsSidebar.isVisible():
+            self.hide_settings_sidebar()
+            return
+
+        self.view.sidebarSettingsEditor.set_settings(self.settings)
+        self.view.settingsSidebar.show()
+        self.view.openSettingsButton.setText("Hide Settings")
+        self.view.statusbar.showMessage(
+            "Settings sidebar expanded. Adjust options and apply when ready."
+        )
+        logger.info("Expanded settings sidebar.")
+
+    def hide_settings_sidebar(self):
+        self.view.settingsSidebar.hide()
+        self.view.openSettingsButton.setText("Settings")
+        self.view.statusbar.showMessage("Settings sidebar collapsed.")
+        logger.info("Collapsed settings sidebar.")
+
+    def apply_sidebar_settings(self):
+        updated_settings = self.view.sidebarSettingsEditor.get_settings()
+        if updated_settings is None:
+            return
+
+        self._apply_updated_settings(updated_settings)
+        self.view.statusbar.showMessage("Settings applied from sidebar.")
 
     def open_second_window(self):
         if self.second_window and self.second_window.isVisible():

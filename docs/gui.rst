@@ -13,18 +13,26 @@ The main window includes:
 - a read-only SSML preview panel
 - action buttons for preview, cleaning, generation, export-related flow, and
   document import
+- a right-aligned status bar output summary for voice, rate, speech volume, and
+  output path
+- a collapsible settings sidebar that can stay open while editing
 - a File menu action for exporting the current editor text to text, Markdown,
   or generated HTML
 - a playback volume control
 - an inline guidance label for disabled or unavailable states
-- a recent audio history panel
+- a collapsible recent audio history panel
 - a menu bar with file, tools, and help actions
 - quick source import actions for local documents, URLs, and pasted raw HTML
 
-Settings Dialog
----------------
+Settings Sidebar
+----------------
 
-The settings dialog currently supports:
+Settings are available from the main window as a collapsible sidebar so users
+can adjust generation options while editing text. The settings editor is shared
+internally so validation, persistence, and connection testing stay consistent
+across the application.
+
+The settings editor currently supports:
 
 - Azure key
 - Azure region
@@ -44,6 +52,9 @@ It also includes an advanced SSML section with:
 - pitch range
 - pause duration
 - pause position
+
+The sidebar can be expanded from the Settings action, applied without leaving
+the editor, and collapsed when the user needs more horizontal workspace.
 
 Document Import Dialog
 ----------------------
@@ -76,6 +87,12 @@ Currently supported file types include:
 - ``.epub``
 - ``.xlsx`` / ``.xls`` / ``.csv``
 - ``.pptx``
+- ``.png`` / ``.jpg`` / ``.jpeg`` / ``.tif`` / ``.tiff`` / ``.bmp`` /
+  ``.webp``
+
+Scanned PDF and image imports use OCR. The Python OCR packages are installed by
+``poetry install``, but the local Tesseract OCR executable must also be
+installed on the user's machine and available on ``PATH``.
 
 The main window additionally supports ``File > Open URL`` and
 ``File > Import Raw HTML``. Both flows parse the source through the same
@@ -109,6 +126,8 @@ Examples:
 - the preview button text changes when only file generation is possible
 - long-running document-load and batch-export work exposes cancel controls while
   the worker is active
+- the settings sidebar starts collapsed and can be expanded, applied, or
+  collapsed without closing the main editor
 
 Automated Qt interaction tests cover main-window menu actions, recent-audio
 history affordances, import-dialog loading states, loaded-row selection, and
@@ -131,5 +150,6 @@ History items are actionable:
 - right-click to open the containing folder
 - right-click to copy the audio path
 - right-click to restore the source text and generation settings snapshot
+- use the ``-`` / ``+`` control to collapse or expand the panel
 
 History is persisted to ``data/dynamic/audio_history.json``.

@@ -7,11 +7,14 @@ The current desktop application supports two Azure Speech configuration paths:
 
 ## Recommended Path
 
-Use the in-app settings dialog for day-to-day use. The GUI supports:
+Use the in-app settings sidebar for day-to-day use. `Tools > Settings` expands
+the sidebar without closing the editor, and `Apply` persists the current values.
+The GUI supports:
 
 - Azure key
 - Azure region
 - connection testing
+- voice, output directory, playback, logging, and SSML defaults
 
 These values are persisted to:
 
@@ -21,7 +24,7 @@ data/dynamic/app_settings.json
 
 ## `.env` Fallback
 
-If the settings dialog does not contain Azure credentials, the application falls
+If the saved GUI settings do not contain Azure credentials, the application falls
 back to a local `.env` file.
 
 Expected format:

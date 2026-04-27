@@ -13,9 +13,9 @@ QDialog {
 QGroupBox {
     background-color: rgba(255, 252, 247, 0.92);
     border: 1px solid #d7c8b3;
-    border-radius: 14px;
-    margin-top: 12px;
-    padding: 14px 14px 12px 14px;
+    border-radius: 10px;
+    margin-top: 10px;
+    padding: 9px 10px 8px 10px;
     font-weight: 600;
 }
 
@@ -26,8 +26,22 @@ QGroupBox::title {
     color: #6d4c33;
 }
 
+QGroupBox#historyGroup {
+    margin-top: 8px;
+    padding: 6px 10px 10px 10px;
+}
+
+QWidget#historyHeader {
+    background: transparent;
+}
+
 QLabel {
     background: transparent;
+}
+
+QLabel#historyTitleLabel {
+    color: #6d4c33;
+    font-weight: 700;
 }
 
 QLabel#actionHintLabel,
@@ -39,10 +53,22 @@ QPushButton {
     background-color: #b85c38;
     color: #fff8f2;
     border: 1px solid #9c4826;
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 8px 14px;
     font-weight: 600;
     min-height: 18px;
+}
+
+QToolButton#historyToggleButton {
+    background-color: #eadbc6;
+    color: #5b412d;
+    border: 1px solid #d2bea4;
+    border-radius: 6px;
+    font-weight: 800;
+}
+
+QToolButton#historyToggleButton:hover {
+    background-color: #dfcab0;
 }
 
 QPushButton:hover {
@@ -67,7 +93,7 @@ QTableWidget,
 QComboBox {
     background-color: #fffdf9;
     border: 1px solid #cfbea8;
-    border-radius: 10px;
+    border-radius: 7px;
     padding: 6px 8px;
     selection-background-color: #d88c62;
     selection-color: #fff9f4;
