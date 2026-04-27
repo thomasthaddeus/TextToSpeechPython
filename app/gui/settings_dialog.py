@@ -24,9 +24,9 @@ from app.model.app_settings import AppSettings
 from app.model.ssml.ssml_config import SSMLConfig
 
 
-class SettingsDialog(QDialog):
+class SettingsEditor(QWidget):
     """
-    Modal dialog for editing application settings.
+    Reusable settings editor used by both the modal dialog and main sidebar.
     """
 
     RATE_OPTIONS = ["x-slow", "slow", "medium", "fast", "x-fast"]
@@ -39,7 +39,6 @@ class SettingsDialog(QDialog):
 
     def __init__(self, settings, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Settings")
         self.settings = AppSettings(**settings.__dict__)
         self.voice_config = SSMLConfig()
         self._build_ui()
@@ -145,16 +144,6 @@ class SettingsDialog(QDialog):
 
         main_layout.addLayout(form_layout)
 
-        button_row = QHBoxLayout()
-        self.save_button = QPushButton("Save", self)
-        self.cancel_button = QPushButton("Cancel", self)
-        self.save_button.clicked.connect(self._accept_if_valid)
-        self.cancel_button.clicked.connect(self.reject)
-        button_row.addStretch(1)
-        button_row.addWidget(self.save_button)
-        button_row.addWidget(self.cancel_button)
-        main_layout.addLayout(button_row)
-
     def _load_settings(self):
         self.voice_combo.setCurrentText(self.settings.voice)
         self.azure_key_edit.setText(self.settings.azure_key)
@@ -181,6 +170,10 @@ class SettingsDialog(QDialog):
         self.advanced_group.setChecked(show_advanced)
         self._toggle_advanced_controls(show_advanced)
         self._update_playback_label(self.settings.playback_volume)
+
+    def set_settings(self, settings):
+        self.settings = AppSettings(**settings.__dict__)
+        self._load_settings()
 
     def _update_playback_label(self, value):
         self.playback_volume_label.setText(f"{value}%")
@@ -225,10 +218,6 @@ class SettingsDialog(QDialog):
         self.settings.logging_enabled = self.logging_checkbox.isChecked()
         return self.settings
 
-    def _accept_if_valid(self):
-        if self.get_settings() is not None:
-            self.accept()
-
     def _test_connection(self):
         azure_key = self.azure_key_edit.text().strip()
         azure_region = self.azure_region_edit.text().strip()
@@ -265,3 +254,36 @@ class SettingsDialog(QDialog):
 
     def _toggle_advanced_controls(self, enabled):
         self.advanced_controls_widget.setVisible(enabled)
+
+
+class SettingsDialog(QDialog):
+    """
+    Modal dialog for editing application settings.
+    """
+
+    def __init__(self, settings, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Settings")
+        self.editor = SettingsEditor(settings, self)
+        self._build_ui()
+
+    def _build_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.addWidget(self.editor)
+
+        button_row = QHBoxLayout()
+        self.save_button = QPushButton("Save", self)
+        self.cancel_button = QPushButton("Cancel", self)
+        self.save_button.clicked.connect(self._accept_if_valid)
+        self.cancel_button.clicked.connect(self.reject)
+        button_row.addStretch(1)
+        button_row.addWidget(self.save_button)
+        button_row.addWidget(self.cancel_button)
+        main_layout.addLayout(button_row)
+
+    def get_settings(self):
+        return self.editor.get_settings()
+
+    def _accept_if_valid(self):
+        if self.get_settings() is not None:
+            self.accept()

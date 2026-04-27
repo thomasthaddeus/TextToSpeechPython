@@ -11,10 +11,12 @@ The current application supports:
 - editing or pasting source text in the main window
 - live SSML preview generation
 - Azure Speech synthesis to preview or exported `.mp3` files
-- a settings dialog for Azure credentials, voice, output directory, logging,
+- a collapsible settings sidebar for Azure credentials, voice, output directory, logging,
   playback volume, and advanced SSML controls
 - document import for `.txt`, `.docx`, `.pdf`, `.html`, `.htm`, `.rtf`,
-  `.epub`, `.xlsx`, `.xls`, `.csv`, and `.pptx`
+  `.epub`, `.xlsx`, `.xls`, `.csv`, `.pptx`, and common image formats
+- OCR extraction for scanned PDFs and image documents when Tesseract OCR is
+  installed locally
 - direct import of web URLs and pasted raw HTML through the same document
   extraction path
 - selective import of extracted document sections into the main editor
@@ -27,6 +29,7 @@ The current application supports:
 - Python 3.11+
 - Poetry
 - Azure Speech resource with a valid key and region
+- Tesseract OCR for scanned PDFs and image imports
 
 ## Installation
 
@@ -40,6 +43,11 @@ This install path includes the parser libraries needed for every format shown
 in the document import dialog. If the active interpreter is missing one of those
 packages, the app shows a startup/import warning and asks you to run
 `poetry install`.
+
+OCR support also requires the Tesseract OCR executable to be installed on the
+user's machine and available on `PATH`. Poetry installs the Python bridge
+package (`pytesseract`), but it cannot install the operating-system OCR engine
+itself.
 
 ## Version Bumping
 
@@ -76,7 +84,7 @@ unavailable until credentials are provided.
 
 You can configure Azure Speech in either of these ways:
 
-1. In the GUI via `Tools > Settings`
+1. In the GUI via `Tools > Settings`, then the settings sidebar `Apply` button
 2. With a local `.env` file in INI format
 
 Example `.env`:
@@ -93,7 +101,7 @@ GUI settings take precedence over `.env` when both are present.
 
 1. Paste text into the editor, open a local document, open a URL, import raw
    HTML, or use `Import Document` for row-based selection.
-2. Open `Tools > Settings` to configure Azure, voice, output directory, and SSML options.
+2. Open `Tools > Settings` to expand the settings sidebar and configure Azure, voice, output directory, and SSML options.
 3. Review the generated SSML preview.
 4. Use `Generate & Play` for a temporary preview file or `Generate File` to export an `.mp3`.
 5. Review, replay, copy, reopen, or restore previous work from the `Recent Audio` panel.
@@ -108,7 +116,8 @@ original structured format.
 
 ## Advanced SSML Controls
 
-The settings dialog includes an expandable advanced SSML section. The current
+The settings sidebar includes an expandable advanced SSML section and can stay
+open while you edit narration text. The current
 GUI exposes:
 
 - emphasis
@@ -127,10 +136,14 @@ These controls are applied to both the SSML preview and generated audio.
 - heading-aware rows for DOCX, HTML, and EPUB content where available
 - table and spreadsheet rows that keep sheet, column, and table context
 - format-aware column labels and import modes, such as slide notes, page text,
-  chapter text, OCR text, or spreadsheet row context
+  chapter text, OCR text, image text, or spreadsheet row context
 - multi-row selection
 - content modes that adapt to the loaded format, such as page text, slide
-  notes, chapter text, OCR text, or spreadsheet row context
+  notes, chapter text, OCR text, image text, or spreadsheet row context
+
+Supported local source types include `.txt`, `.docx`, `.pdf`, `.html`, `.htm`,
+`.rtf`, `.epub`, `.xlsx`, `.xls`, `.csv`, `.pptx`, `.png`, `.jpg`, `.jpeg`,
+`.tif`, `.tiff`, `.bmp`, and `.webp`.
 
 From that dialog you can:
 
@@ -144,7 +157,7 @@ parsed as structured HTML sections before being placed in the editor.
 
 ## Logging
 
-If logging is enabled in `Tools > Settings`, the application writes logs to:
+If logging is enabled from the settings sidebar, the application writes logs to:
 
 ```text
 data/dynamic/logs/app.log
@@ -161,6 +174,7 @@ YYYYMMDDHHmmss
 The `Recent Audio` panel keeps the latest generated files and supports workflow
 actions:
 
+- collapse or expand the panel with the `-` / `+` control
 - double-click a history item to replay it
 - right-click to open the containing folder
 - right-click to copy the generated audio path

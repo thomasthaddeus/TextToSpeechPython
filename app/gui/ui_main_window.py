@@ -14,10 +14,13 @@ from PyQt6.QtWidgets import (
     QSplitter,
     QStatusBar,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 from PyQt6.QtCore import Qt
+from app.gui.settings_dialog import SettingsEditor
+from app.model.app_settings import AppSettings
 
 
 class Ui_MainWindow:
@@ -28,7 +31,10 @@ class Ui_MainWindow:
     def setupUi(self, main_window):
         main_window.setWindowTitle("Text To Speech")
         central_widget = QWidget(main_window)
-        root_layout = QVBoxLayout(central_widget)
+        outer_layout = QHBoxLayout(central_widget)
+        main_panel = QWidget(central_widget)
+        root_layout = QVBoxLayout(main_panel)
+        outer_layout.addWidget(main_panel, 1)
 
         self.audioControlsGroup = QGroupBox("Actions", central_widget)
         action_row = QHBoxLayout(self.audioControlsGroup)
@@ -70,6 +76,7 @@ class Ui_MainWindow:
         action_row.addStretch(1)
         action_row.addWidget(self.playbackVolumeSlider)
         action_row.addWidget(self.playbackVolumeValueLabel)
+
         root_layout.addWidget(self.audioControlsGroup)
 
         self.actionHintLabel = QLabel(
@@ -81,24 +88,6 @@ class Ui_MainWindow:
         root_layout.addWidget(self.actionHintLabel)
 
         content_row = QHBoxLayout()
-
-        self.statusGroup = QGroupBox("Current Output", central_widget)
-        status_layout = QVBoxLayout(self.statusGroup)
-        self.voiceSummaryLabel = QLabel("Voice: en-US-GuyNeural", self.statusGroup)
-        self.rateSummaryLabel = QLabel("Rate: medium", self.statusGroup)
-        self.volumeSummaryLabel = QLabel("Speech Volume: medium", self.statusGroup)
-        self.outputSummaryLabel = QLabel("Output: data/dynamic/audio", self.statusGroup)
-        for label in (
-            self.voiceSummaryLabel,
-            self.rateSummaryLabel,
-            self.volumeSummaryLabel,
-            self.outputSummaryLabel,
-        ):
-            label.setWordWrap(True)
-            status_layout.addWidget(label)
-        status_layout.addStretch(1)
-        self.statusGroup.setMaximumWidth(280)
-        content_row.addWidget(self.statusGroup)
 
         self.editorSplitter = QSplitter(Qt.Orientation.Horizontal, central_widget)
         self.textEdit = QTextEdit(self.editorSplitter)
@@ -114,8 +103,26 @@ class Ui_MainWindow:
         content_row.addWidget(self.editorSplitter, 1)
         root_layout.addLayout(content_row, 1)
 
-        self.historyGroup = QGroupBox("Recent Audio", central_widget)
+        self.historyGroup = QGroupBox(central_widget)
+        self.historyGroup.setObjectName("historyGroup")
         history_layout = QVBoxLayout(self.historyGroup)
+        history_layout.setContentsMargins(10, 6, 10, 10)
+        history_layout.setSpacing(4)
+        self.historyHeader = QWidget(self.historyGroup)
+        self.historyHeader.setObjectName("historyHeader")
+        history_header_layout = QHBoxLayout(self.historyHeader)
+        history_header_layout.setContentsMargins(0, 0, 0, 0)
+        self.historyTitleLabel = QLabel("Recent Audio", self.historyHeader)
+        self.historyTitleLabel.setObjectName("historyTitleLabel")
+        history_header_layout.addWidget(self.historyTitleLabel)
+        history_header_layout.addStretch(1)
+        self.historyToggleButton = QToolButton(self.historyGroup)
+        self.historyToggleButton.setObjectName("historyToggleButton")
+        self.historyToggleButton.setText("-")
+        self.historyToggleButton.setToolTip("Collapse Recent Audio")
+        self.historyToggleButton.setFixedSize(22, 22)
+        history_header_layout.addWidget(self.historyToggleButton)
+        history_layout.addWidget(self.historyHeader)
         self.historyList = QListWidget(self.historyGroup)
         self.historyList.setAlternatingRowColors(True)
         self.historyList.setSelectionMode(
@@ -128,8 +135,35 @@ class Ui_MainWindow:
             "Double-click generated audio to play it, or right-click for history actions."
         )
         self.historyGroup.setMaximumHeight(170)
+        self.historyGroup.setMinimumHeight(48)
         history_layout.addWidget(self.historyList)
         root_layout.addWidget(self.historyGroup)
+
+        self.settingsSidebar = QGroupBox("Settings", central_widget)
+        self.settingsSidebar.setObjectName("settingsSidebar")
+        settings_sidebar_layout = QVBoxLayout(self.settingsSidebar)
+        self.sidebarSettingsEditor = SettingsEditor(
+            AppSettings(),
+            self.settingsSidebar,
+        )
+        settings_sidebar_layout.addWidget(self.sidebarSettingsEditor, 1)
+        sidebar_button_row = QHBoxLayout()
+        self.applySidebarSettingsButton = QPushButton(
+            "Apply",
+            self.settingsSidebar,
+        )
+        self.collapseSettingsSidebarButton = QPushButton(
+            "Collapse",
+            self.settingsSidebar,
+        )
+        sidebar_button_row.addStretch(1)
+        sidebar_button_row.addWidget(self.applySidebarSettingsButton)
+        sidebar_button_row.addWidget(self.collapseSettingsSidebarButton)
+        settings_sidebar_layout.addLayout(sidebar_button_row)
+        self.settingsSidebar.setMinimumWidth(320)
+        self.settingsSidebar.setMaximumWidth(420)
+        self.settingsSidebar.hide()
+        outer_layout.addWidget(self.settingsSidebar)
 
         main_window.setCentralWidget(central_widget)
 
@@ -164,4 +198,19 @@ class Ui_MainWindow:
         main_window.setMenuBar(self.menubar)
 
         self.statusbar = QStatusBar(main_window)
+        self.outputStatusLabel = QLabel(
+            "Voice: en-US-GuyNeural | Rate: medium | Speech Volume: medium | Output: data/dynamic/audio",
+            self.statusbar,
+        )
+        self.outputStatusLabel.setObjectName("outputStatusLabel")
+        self.outputStatusLabel.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.outputStatusLabel.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self.outputStatusLabel.setToolTip(
+            "Current voice, rate, speech volume, and output location."
+        )
+        self.statusbar.addPermanentWidget(self.outputStatusLabel, 1)
         main_window.setStatusBar(self.statusbar)
