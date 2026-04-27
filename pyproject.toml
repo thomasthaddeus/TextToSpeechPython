@@ -24,6 +24,12 @@ dependencies = [
     "xlsxwriter",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-qt",
+]
+
 [project.scripts]
 tts-app = "app.main:main"
 
@@ -48,6 +54,16 @@ python-pptx = "*"
 striprtf = "*"
 xlrd = "*"
 xlsxwriter = "*"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "*"
+pytest-qt = "*"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+qt_api = "pyqt6"
+addopts = "-p no:cacheprovider"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

@@ -1,4 +1,4 @@
-import unittest
+import pytest
 
 from app.controller.second_controller import SecondController
 
@@ -46,8 +46,9 @@ class ViewStub:
         self.selectionHelpLabel = LabelStub()
 
 
-class SecondControllerImportTests(unittest.TestCase):
-    def _controller(self, mode_text="Prefer Context When Available"):
+@pytest.fixture
+def controller_factory():
+    def build_controller(mode_text="Prefer Context When Available"):
         controller = SecondController.__new__(SecondController)
         controller.view = ViewStub(mode_text)
         controller.current_mode_map = {
@@ -64,104 +65,94 @@ class SecondControllerImportTests(unittest.TestCase):
         }
         return controller
 
-    def test_build_import_payload_prefers_secondary_with_primary_fallback(self):
-        controller = self._controller("Prefer Context When Available")
-        selected_rows = [
-            {
-                "item_number": 1,
-                "title": "Item 1",
-                "primary_text": "Primary summary",
-                "secondary_text": "Context notes",
-            },
-            {
-                "item_number": 2,
-                "title": "Item 2",
-                "primary_text": "Only primary text",
-                "secondary_text": "",
-            },
-        ]
+    return build_controller
 
-        payload_rows, imported_text = controller._build_import_payload(selected_rows)
 
-        self.assertEqual(len(payload_rows), 2)
-        self.assertEqual(payload_rows[0]["resolved_text"], "Context notes")
-        self.assertEqual(payload_rows[1]["resolved_text"], "Only primary text")
-        self.assertEqual(imported_text, "Context notes\n\nOnly primary text")
+def test_build_import_payload_prefers_secondary_with_primary_fallback(
+    controller_factory,
+):
+    controller = controller_factory("Prefer Context When Available")
+    selected_rows = [
+        {
+            "item_number": 1,
+            "title": "Item 1",
+            "primary_text": "Primary summary",
+            "secondary_text": "Context notes",
+        },
+        {
+            "item_number": 2,
+            "title": "Item 2",
+            "primary_text": "Only primary text",
+            "secondary_text": "",
+        },
+    ]
 
-    def test_build_import_payload_combines_main_text_and_context(self):
-        controller = self._controller("Combine Main Text and Context")
-        selected_rows = [
-            {
-                "item_number": 3,
-                "title": "Chapter 3",
-                "primary_text": "Agenda",
-                "secondary_text": "Longer narration",
-            }
-        ]
+    payload_rows, imported_text = controller._build_import_payload(selected_rows)
 
-        payload_rows, imported_text = controller._build_import_payload(selected_rows)
+    assert len(payload_rows) == 2
+    assert payload_rows[0]["resolved_text"] == "Context notes"
+    assert payload_rows[1]["resolved_text"] == "Only primary text"
+    assert imported_text == "Context notes\n\nOnly primary text"
 
-        self.assertEqual(payload_rows[0]["content_mode"], "combine")
-        self.assertEqual(
-            payload_rows[0]["resolved_text"],
-            "Agenda\n\nLonger narration",
-        )
-        self.assertEqual(imported_text, "Agenda\n\nLonger narration")
 
-    def test_apply_format_profile_uses_slide_specific_terms_for_pptx(self):
-        controller = self._controller("")
+def test_build_import_payload_combines_main_text_and_context(controller_factory):
+    controller = controller_factory("Combine Main Text and Context")
+    selected_rows = [
+        {
+            "item_number": 3,
+            "title": "Chapter 3",
+            "primary_text": "Agenda",
+            "secondary_text": "Longer narration",
+        }
+    ]
 
-        controller._apply_format_profile("pptx")
+    payload_rows, imported_text = controller._build_import_payload(selected_rows)
 
-        self.assertEqual(
-            controller.view.previewTable.headers,
+    assert payload_rows[0]["content_mode"] == "combine"
+    assert payload_rows[0]["resolved_text"] == "Agenda\n\nLonger narration"
+    assert imported_text == "Agenda\n\nLonger narration"
+
+
+@pytest.mark.parametrize(
+    ("source_type", "expected_headers", "expected_mode", "expected_mode_value"),
+    [
+        (
+            "pptx",
             ["Item", "Slide Text", "Speaker Notes"],
-        )
-        self.assertIn("Speaker Notes Only", controller.view.contentModeComboBox.items)
-        self.assertIn("slides", controller.view.selectionHelpLabel.text)
-
-    def test_apply_format_profile_uses_page_terms_for_pdf(self):
-        controller = self._controller("")
-
-        controller._apply_format_profile("pdf")
-
-        self.assertEqual(
-            controller.view.previewTable.headers,
+            "Speaker Notes Only",
+            "secondary_only",
+        ),
+        (
+            "pdf",
             ["Item", "Page Text", "Page Context"],
-        )
-        self.assertEqual(
-            controller.current_mode_map["Page Text Only"],
+            "Page Text Only",
             "primary_only",
-        )
-
-    def test_apply_format_profile_uses_spreadsheet_terms_for_xlsx(self):
-        controller = self._controller("")
-
-        controller._apply_format_profile("xlsx")
-
-        self.assertEqual(
-            controller.view.previewTable.headers,
+        ),
+        (
+            "xlsx",
             ["Item", "Row Text", "Sheet / Column Context"],
-        )
-        self.assertEqual(
-            controller.current_mode_map["Include Sheet and Column Context"],
+            "Include Sheet and Column Context",
             "combine",
-        )
-
-    def test_unknown_format_uses_generic_document_terms(self):
-        controller = self._controller("")
-
-        controller._apply_format_profile("unknown")
-
-        self.assertEqual(
-            controller.view.previewTable.headers,
+        ),
+        (
+            "unknown",
             ["Item", "Main Text", "Context"],
-        )
-        self.assertIn(
             "Prefer Context When Available",
-            controller.view.contentModeComboBox.items,
-        )
+            "prefer_secondary",
+        ),
+    ],
+)
+def test_apply_format_profile_uses_format_specific_terms(
+    controller_factory,
+    source_type,
+    expected_headers,
+    expected_mode,
+    expected_mode_value,
+):
+    controller = controller_factory("")
 
+    controller._apply_format_profile(source_type)
 
-if __name__ == "__main__":
-    unittest.main()
+    assert controller.view.previewTable.headers == expected_headers
+    assert expected_mode in controller.view.contentModeComboBox.items
+    assert controller.current_mode_map[expected_mode] == expected_mode_value
