@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import importlib.util
 from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 
 @dataclass
@@ -182,20 +184,65 @@ class DocumentScraper:
             rows = self._scrape_pptx(path)
         elif suffix in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}:
             rows = self._scrape_image(path)
+        return self._rows_to_dicts(rows, path, suffix.lstrip("."))
+
+    def scrape_html_text(
+        self,
+        html,
+        source_name="Pasted HTML",
+        source_path="raw-html",
+        source_type="html",
+    ):
+        """Scrape raw HTML content into the same normalized rows as HTML files."""
+        missing_dependencies = self.missing_dependencies_for_suffix(".html")
+        if missing_dependencies:
+            raise RuntimeError(
+                self.format_missing_dependency_message(missing_dependencies)
+            )
+
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(html, "html.parser")
+        title = soup.title.get_text(strip=True) if soup.title else source_name
+        rows = self._html_to_rows(soup, title, "html_section")
+        return self._rows_to_dicts(rows, source_path, source_type)
+
+    def scrape_url(self, url, timeout=20):
+        """Fetch a URL and scrape the response body as structured HTML content."""
+        parsed_url = urlparse(url)
+        if parsed_url.scheme not in {"http", "https"}:
+            raise ValueError("URL imports require an http or https address.")
+
+        request = Request(
+            url,
+            headers={"User-Agent": "TextToSpeechPython document importer"},
+        )
+        with urlopen(request, timeout=timeout) as response:
+            charset = response.headers.get_content_charset() or "utf-8"
+            html = response.read().decode(charset, errors="replace")
+
+        return self.scrape_html_text(
+            html,
+            source_name=url,
+            source_path=url,
+            source_type="url",
+        )
+
+    def _rows_to_dicts(self, rows, source_path, source_type):
         return [
-            self._row_to_dict(row, path)
+            self._row_to_dict(row, source_path, source_type)
             for row in rows
             if self._has_content(row)
         ]
 
-    def _row_to_dict(self, row, path):
+    def _row_to_dict(self, row, source_path, source_type):
         return {
             "item_number": row.item_number,
             "title": row.title,
             "primary_text": row.primary_text,
             "secondary_text": row.secondary_text,
-            "source_path": str(path),
-            "source_type": path.suffix.lower().lstrip("."),
+            "source_path": str(source_path),
+            "source_type": source_type,
             "metadata": dict(row.metadata),
         }
 

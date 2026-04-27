@@ -989,14 +989,14 @@ files = [
 
 [[package]]
 name = "striprtf"
-version = "0.0.31"
+version = "0.0.32"
 description = "A simple library to convert rtf to text"
 optional = false
 python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "striprtf-0.0.31-py3-none-any.whl", hash = "sha256:8ec8150a4213951675f711750a4a5b8a98a6da3ef85deeff0bb6e39cd2beeda4"},
-    {file = "striprtf-0.0.31.tar.gz", hash = "sha256:ce4b6403427d7d5cda95fdb61365432225f6fbe5ea6797e1357f4045d351ba2d"},
+    {file = "striprtf-0.0.32-py3-none-any.whl", hash = "sha256:9f695fea9662cb4ffccf2b56286b3e77028c0a61e87258719584e681e0144869"},
+    {file = "striprtf-0.0.32.tar.gz", hash = "sha256:7f375a375d99a2700842173168c90c9b545cb244241ffc5d868ed9f6baf9155f"},
 ]
 
 [package.extras]

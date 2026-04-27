@@ -49,14 +49,6 @@ class Ui_Dialog:
             dialog,
         )
         self.contentModeComboBox = QComboBox(dialog)
-        self.contentModeComboBox.addItems(
-            [
-                "Prefer Secondary Text",
-                "Secondary Text Only",
-                "Primary Text Only",
-                "Combine Primary and Secondary Text",
-            ]
-        )
         mode_row.addWidget(self.selectionHelpLabel)
         mode_row.addWidget(self.contentModeComboBox)
         layout.addLayout(mode_row)

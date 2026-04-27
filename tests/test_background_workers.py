@@ -53,6 +53,23 @@ class BackgroundWorkerTests(unittest.TestCase):
         self.assertFalse(finished)
         self.assertFalse(failed)
 
+    def test_document_parse_worker_can_parse_raw_html_sources(self):
+        finished = []
+        failed = []
+        worker = DocumentParseWorker(
+            "<html><body><h1>Worker HTML</h1><p>Unique worker HTML body.</p></body></html>",
+            source_kind="html",
+        )
+        worker.finished.connect(finished.append)
+        worker.failed.connect(failed.append)
+
+        worker.run()
+
+        self.assertFalse(failed)
+        self.assertEqual(len(finished), 1)
+        self.assertEqual(finished[0][0]["source_type"], "html")
+        self.assertIn("Unique worker HTML body.", finished[0][0]["primary_text"])
+
     def test_batch_export_worker_writes_files_and_reports_progress(self):
         temp_dir = Path("data/dynamic/tmp/batch_worker_test")
         shutil.rmtree(temp_dir, ignore_errors=True)

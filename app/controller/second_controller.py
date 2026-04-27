@@ -10,13 +10,141 @@ from loguru import logger
 
 
 class SecondController(QObject):
-    CONTENT_MODE_MAP = {
-        "Prefer Secondary Text": "prefer_notes",
-        "Secondary Text Only": "notes_only",
-        "Primary Text Only": "slide_text_only",
-        "Combine Slide Text and Notes": "combine",
-        "Combine Primary and Secondary Text": "combine",
+    CONTENT_MODES = {
+        "prefer_secondary": {
+            "primary_label": "Primary Text",
+            "secondary_label": "Secondary Text",
+            "label": "Prefer Secondary Text",
+        },
+        "secondary_only": {
+            "primary_label": "Primary Text",
+            "secondary_label": "Secondary Text",
+            "label": "Secondary Text Only",
+        },
+        "primary_only": {
+            "primary_label": "Primary Text",
+            "secondary_label": "Secondary Text",
+            "label": "Primary Text Only",
+        },
+        "combine": {
+            "primary_label": "Primary Text",
+            "secondary_label": "Secondary Text",
+            "label": "Combine Primary and Secondary Text",
+        },
     }
+    FORMAT_PROFILES = {
+        "pptx": {
+            "primary_label": "Slide Text",
+            "secondary_label": "Speaker Notes",
+            "modes": [
+                ("prefer_secondary", "Prefer Speaker Notes"),
+                ("secondary_only", "Speaker Notes Only"),
+                ("primary_only", "Slide Text Only"),
+                ("combine", "Combine Slide Text and Speaker Notes"),
+            ],
+            "help": "Select slides and choose whether to import slide text, speaker notes, or both:",
+        },
+        "pdf": {
+            "primary_label": "Page Text",
+            "secondary_label": "Page Context",
+            "modes": [
+                ("primary_only", "Page Text Only"),
+                ("combine", "Include Page Context"),
+            ],
+            "help": "Select pages and choose what page content to import or batch export:",
+        },
+        "docx": {
+            "primary_label": "Body / Section Text",
+            "secondary_label": "Structure Context",
+            "modes": [
+                ("primary_only", "Body Text Only"),
+                ("combine", "Include Structure Context"),
+            ],
+            "help": "Select document sections and choose what body content to import or batch export:",
+        },
+        "html": {
+            "primary_label": "Section Text",
+            "secondary_label": "HTML Context",
+            "modes": [
+                ("primary_only", "Section Text Only"),
+                ("combine", "Include HTML Context"),
+            ],
+            "help": "Select HTML sections and choose what content to import or batch export:",
+        },
+        "htm": {
+            "primary_label": "Section Text",
+            "secondary_label": "HTML Context",
+            "modes": [
+                ("primary_only", "Section Text Only"),
+                ("combine", "Include HTML Context"),
+            ],
+            "help": "Select HTML sections and choose what content to import or batch export:",
+        },
+        "epub": {
+            "primary_label": "Chapter Text",
+            "secondary_label": "Chapter Context",
+            "modes": [
+                ("primary_only", "Chapter Text Only"),
+                ("combine", "Include Chapter Context"),
+            ],
+            "help": "Select chapters and choose what chapter content to import or batch export:",
+        },
+        "csv": {
+            "primary_label": "Row Text",
+            "secondary_label": "Sheet / Column Context",
+            "modes": [
+                ("primary_only", "Row Text Only"),
+                ("combine", "Include Column Context"),
+            ],
+            "help": "Select rows and choose whether to include column context:",
+        },
+        "xlsx": {
+            "primary_label": "Row Text",
+            "secondary_label": "Sheet / Column Context",
+            "modes": [
+                ("primary_only", "Row Text Only"),
+                ("combine", "Include Sheet and Column Context"),
+            ],
+            "help": "Select spreadsheet rows and choose whether to include sheet/column context:",
+        },
+        "xls": {
+            "primary_label": "Row Text",
+            "secondary_label": "Sheet / Column Context",
+            "modes": [
+                ("primary_only", "Row Text Only"),
+                ("combine", "Include Sheet and Column Context"),
+            ],
+            "help": "Select spreadsheet rows and choose whether to include sheet/column context:",
+        },
+        "rtf": {
+            "primary_label": "Rich Text",
+            "secondary_label": "Context",
+            "modes": [
+                ("primary_only", "Rich Text Only"),
+                ("combine", "Include Context"),
+            ],
+            "help": "Select rich text blocks and choose what content to import or batch export:",
+        },
+        "txt": {
+            "primary_label": "Text Block",
+            "secondary_label": "Context",
+            "modes": [
+                ("primary_only", "Text Block Only"),
+                ("combine", "Include Context"),
+            ],
+            "help": "Select text blocks and choose what content to import or batch export:",
+        },
+        "image": {
+            "primary_label": "OCR Text",
+            "secondary_label": "OCR Context",
+            "modes": [
+                ("primary_only", "OCR Text Only"),
+                ("combine", "Include OCR Context"),
+            ],
+            "help": "Select OCR rows and choose what text to import or batch export:",
+        },
+    }
+    IMAGE_TYPES = {"png", "jpg", "jpeg", "tif", "tiff", "bmp", "webp"}
 
     def __init__(self, view):
         super().__init__()
@@ -25,6 +153,7 @@ class SecondController(QObject):
         self.import_rows = []
         self.load_thread = None
         self.load_worker = None
+        self.current_mode_map = {}
         self.view.browseButton.clicked.connect(self.choose_file)
         self.view.loadButton.clicked.connect(self.load_file)
         self.view.cancelLoadButton.clicked.connect(self.cancel_load)
@@ -35,6 +164,7 @@ class SecondController(QObject):
             self.view.previewTable.clearSelection
         )
         self.view.closeButton.clicked.connect(self.view.close)
+        self._apply_format_profile(None)
         self._surface_document_dependency_status()
 
     def _selected_rows(self):
@@ -49,9 +179,9 @@ class SecondController(QObject):
         primary_text = (row.get("primary_text") or "").strip()
         secondary_text = (row.get("secondary_text") or "").strip()
 
-        if content_mode == "notes_only":
+        if content_mode == "secondary_only":
             return secondary_text
-        if content_mode == "slide_text_only":
+        if content_mode == "primary_only":
             return primary_text
         if content_mode == "combine":
             parts = [part for part in (primary_text, secondary_text) if part]
@@ -59,7 +189,7 @@ class SecondController(QObject):
         return secondary_text or primary_text
 
     def _build_import_payload(self, selected_rows):
-        content_mode = self.CONTENT_MODE_MAP[
+        content_mode = self.current_mode_map[
             self.view.contentModeComboBox.currentText()
         ]
         payload_rows = []
@@ -91,6 +221,50 @@ class SecondController(QObject):
             self.view.previewTable.setItem(row_index, 2, secondary_cell)
 
         self.view.previewTable.resizeColumnsToContents()
+
+    def _source_type_for_rows(self, rows):
+        source_types = {
+            str(row.get("source_type", "")).lower()
+            for row in rows
+            if row.get("source_type")
+        }
+        if len(source_types) != 1:
+            return None
+
+        source_type = next(iter(source_types))
+        return "image" if source_type in self.IMAGE_TYPES else source_type
+
+    def _profile_for_source_type(self, source_type):
+        return self.FORMAT_PROFILES.get(
+            source_type,
+            {
+                "primary_label": "Primary Text",
+                "secondary_label": "Secondary Text",
+                "modes": [
+                    ("prefer_secondary", "Prefer Secondary Text"),
+                    ("secondary_only", "Secondary Text Only"),
+                    ("primary_only", "Primary Text Only"),
+                    ("combine", "Combine Primary and Secondary Text"),
+                ],
+                "help": "Select document rows and choose what to import or batch export:",
+            },
+        )
+
+    def _apply_format_profile(self, source_type):
+        profile = self._profile_for_source_type(source_type)
+        self.view.previewTable.setHorizontalHeaderLabels(
+            [
+                "Item",
+                profile["primary_label"],
+                profile["secondary_label"],
+            ]
+        )
+        self.view.selectionHelpLabel.setText(profile["help"])
+        self.view.contentModeComboBox.clear()
+        self.current_mode_map = {}
+        for mode_value, mode_label in profile["modes"]:
+            self.view.contentModeComboBox.addItem(mode_label)
+            self.current_mode_map[mode_label] = mode_value
 
     def _set_loading_state(self, is_loading):
         for button_name in (
@@ -176,6 +350,7 @@ class SecondController(QObject):
 
     def _handle_load_finished(self, extracted_rows):
         self.import_rows = extracted_rows
+        self._apply_format_profile(self._source_type_for_rows(extracted_rows))
         self._populate_preview_table()
         if self.import_rows:
             self.view.previewTable.selectAll()
