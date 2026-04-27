@@ -2,19 +2,19 @@ from pathlib import Path
 
 from app.controller.background_workers import BatchExportWorker, DocumentParseWorker
 from app.model.app_settings import AppSettings
+from app.model.tts_providers.models import TTSProviderConfig
 
 
 class FakeTTSProcessor:
-    def __init__(self, azure_key, azure_region):
-        self.azure_key = azure_key
-        self.azure_region = azure_region
+    def __init__(self, provider_config):
+        self.provider_config = provider_config
 
     def text_to_speech(self, text, use_ssml=False):
         return f"audio:{use_ssml}:{text}".encode("utf-8")
 
 
-def fake_tts_processor(azure_key, azure_region):
-    return FakeTTSProcessor(azure_key, azure_region)
+def fake_tts_processor(provider_config):
+    return FakeTTSProcessor(provider_config)
 
 
 def test_document_parse_worker_can_cancel_before_parsing():
@@ -74,8 +74,13 @@ def test_batch_export_worker_writes_files_and_reports_progress(
         rows=rows,
         output_dir=runtime_tmp_path,
         settings=AppSettings(auto_clean_text=False),
-        azure_key="fake-key",
-        azure_region="fake-region",
+        provider_config=TTSProviderConfig(
+            provider_name="azure",
+            credentials={
+                "subscription_key": "fake-key",
+                "region": "fake-region",
+            },
+        ),
     )
     worker.finished.connect(finished.append)
     worker.failed.connect(lambda message, files: failed.append((message, files)))
@@ -122,8 +127,13 @@ def test_batch_export_worker_can_cancel_between_rows(runtime_tmp_path, monkeypat
         rows=rows,
         output_dir=runtime_tmp_path,
         settings=AppSettings(auto_clean_text=False),
-        azure_key="fake-key",
-        azure_region="fake-region",
+        provider_config=TTSProviderConfig(
+            provider_name="azure",
+            credentials={
+                "subscription_key": "fake-key",
+                "region": "fake-region",
+            },
+        ),
     )
     worker.finished.connect(finished.append)
     worker.cancelled.connect(cancelled.append)

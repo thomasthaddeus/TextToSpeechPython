@@ -9,14 +9,15 @@ from loguru import logger
 from app.model.app_settings import AppSettings
 from app.model.scraper.document_scraper import DocumentScraper
 from app.model.ssml.text_to_ssml import TextToSSML
+from app.model.tts_providers import get_provider_display_name
 from app.utils.text_cleaner import TextCleaner
 
 
-def create_tts_processor(azure_key, azure_region):
-    """Create the Azure TTS processor only when audio generation is requested."""
+def create_tts_processor(provider_config):
+    """Create the TTS processor only when audio generation is requested."""
     from app.model.processors.tts_processor import TTSProcessor
 
-    return TTSProcessor(azure_key=azure_key, azure_region=azure_region)
+    return TTSProcessor(provider_config=provider_config)
 
 
 def sanitize_batch_name(value):
@@ -118,13 +119,12 @@ class BatchExportWorker(QObject):
     failed = pyqtSignal(str, object)
     cancelled = pyqtSignal(object)
 
-    def __init__(self, rows, output_dir, settings, azure_key, azure_region):
+    def __init__(self, rows, output_dir, settings, provider_config):
         super().__init__()
         self.rows = [dict(row) for row in rows]
         self.output_dir = Path(output_dir)
         self.settings = AppSettings(**vars(settings))
-        self.azure_key = azure_key
-        self.azure_region = azure_region
+        self.provider_config = provider_config
         self._cancel_requested = False
 
     def request_cancel(self):
@@ -137,8 +137,11 @@ class BatchExportWorker(QObject):
                 self.cancelled.emit(exported_files)
                 return
 
-            if not self.azure_key or not self.azure_region:
-                raise RuntimeError("Azure Speech credentials are required.")
+            if self.provider_config is None:
+                provider_name = get_provider_display_name(
+                    getattr(self.settings, "tts_provider", "azure")
+                )
+                raise RuntimeError(f"{provider_name} credentials are required.")
 
             exportable_rows = [
                 row for row in self.rows if (row.get("resolved_text") or "").strip()
@@ -148,7 +151,7 @@ class BatchExportWorker(QObject):
                 return
 
             self.output_dir.mkdir(parents=True, exist_ok=True)
-            processor = create_tts_processor(self.azure_key, self.azure_region)
+            processor = create_tts_processor(self.provider_config)
             cleaner = TextCleaner()
             total_rows = len(exportable_rows)
 

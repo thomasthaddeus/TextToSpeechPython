@@ -19,9 +19,13 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
-from app.model.api.azure_tts_api import AzureTTSAPI
 from app.model.app_settings import AppSettings
 from app.model.ssml.ssml_config import SSMLConfig
+from app.model.tts_providers import (
+    TTSProviderConfig,
+    TTSRequest,
+    create_tts_provider,
+)
 
 
 class SettingsEditor(QWidget):
@@ -231,8 +235,18 @@ class SettingsEditor(QWidget):
             return
 
         try:
-            client = AzureTTSAPI(azure_key, azure_region)
-            audio_data = client.get_audio_from_text("Connection test.")
+            provider = create_tts_provider(
+                TTSProviderConfig(
+                    provider_name="azure",
+                    credentials={
+                        "subscription_key": azure_key,
+                        "region": azure_region,
+                    },
+                )
+            )
+            audio_data = provider.synthesize(
+                TTSRequest(text="Connection test.")
+            ).audio_data
         except Exception as error:
             QMessageBox.critical(
                 self,

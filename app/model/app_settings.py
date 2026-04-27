@@ -22,6 +22,7 @@ class AppSettings:
     playback_volume: int = 80
     auto_clean_text: bool = True
     logging_enabled: bool = True
+    tts_provider: str = "azure"
     azure_key: str = ""
     azure_region: str = ""
     output_dir: str = "data/dynamic/audio"
