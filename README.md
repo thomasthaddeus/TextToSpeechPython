@@ -215,7 +215,7 @@ The repo currently includes focused regression tests for:
 Run them with:
 
 ```bash
-python -m unittest discover -s tests
+poetry run pytest
 ```
 
 ## License
