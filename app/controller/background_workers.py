@@ -68,17 +68,30 @@ class DocumentParseWorker(QObject):
 
     finished = pyqtSignal(object)
     failed = pyqtSignal(str)
+    cancelled = pyqtSignal()
 
     def __init__(self, file_path):
         super().__init__()
         self.file_path = file_path
+        self._cancel_requested = False
+
+    def request_cancel(self):
+        self._cancel_requested = True
 
     def run(self):
+        if self._cancel_requested:
+            self.cancelled.emit()
+            return
+
         try:
             rows = DocumentScraper().scrape_file(self.file_path)
         except Exception as error:
             logger.exception("Document parsing failed for {}: {}", self.file_path, error)
             self.failed.emit(str(error))
+            return
+
+        if self._cancel_requested:
+            self.cancelled.emit()
             return
 
         self.finished.emit(rows)
@@ -90,6 +103,7 @@ class BatchExportWorker(QObject):
     progress = pyqtSignal(int, int, str)
     finished = pyqtSignal(object)
     failed = pyqtSignal(str, object)
+    cancelled = pyqtSignal(object)
 
     def __init__(self, rows, output_dir, settings, azure_key, azure_region):
         super().__init__()
@@ -98,10 +112,18 @@ class BatchExportWorker(QObject):
         self.settings = AppSettings(**vars(settings))
         self.azure_key = azure_key
         self.azure_region = azure_region
+        self._cancel_requested = False
+
+    def request_cancel(self):
+        self._cancel_requested = True
 
     def run(self):
         exported_files = []
         try:
+            if self._cancel_requested:
+                self.cancelled.emit(exported_files)
+                return
+
             if not self.azure_key or not self.azure_region:
                 raise RuntimeError("Azure Speech credentials are required.")
 
@@ -118,9 +140,17 @@ class BatchExportWorker(QObject):
             total_rows = len(exportable_rows)
 
             for row_index, row in enumerate(exportable_rows, start=1):
+                if self._cancel_requested:
+                    self.cancelled.emit(exported_files)
+                    return
+
                 resolved_text = (row.get("resolved_text") or "").strip()
                 ssml = build_ssml_document(resolved_text, self.settings, cleaner)
                 audio_data = processor.text_to_speech(ssml, use_ssml=True)
+
+                if self._cancel_requested:
+                    self.cancelled.emit(exported_files)
+                    return
 
                 mode_name = sanitize_batch_name(row.get("content_mode", "prefer_notes"))
                 title_name = sanitize_batch_name(

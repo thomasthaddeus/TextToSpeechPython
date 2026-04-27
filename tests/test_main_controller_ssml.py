@@ -118,6 +118,8 @@ class ActionStateViewStub:
         self.generateButton = ToggleStub()
         self.actionExportAudio = ToggleStub()
         self.stopButton = ToggleStub()
+        self.cancelTaskButton = ToggleStub()
+        self.openSecondWindowButton = ToggleStub()
         self.playbackVolumeSlider = ToggleStub()
         self.actionHintLabel = LabelStub()
 
@@ -138,6 +140,23 @@ class MainControllerActionStateTests(unittest.TestCase):
         self.assertFalse(controller.view.generateButton.enabled)
         self.assertFalse(controller.view.actionExportAudio.enabled)
         self.assertIn("Type or import text", controller.view.actionHintLabel.text)
+
+    def test_refresh_action_states_enables_cancel_during_background_work(self):
+        controller = MainController.__new__(MainController)
+        controller.settings = AppSettings()
+        controller.view = ActionStateViewStub("Hello world")
+        controller.media_player = object()
+        controller.audio_output = object()
+        controller.preview_audio_path = None
+        controller.batch_export_active = True
+        controller.document_parse_thread = None
+
+        controller._refresh_action_states()
+
+        self.assertTrue(controller.view.cancelTaskButton.enabled)
+        self.assertFalse(controller.view.generateButton.enabled)
+        self.assertFalse(controller.view.openSecondWindowButton.enabled)
+        self.assertIn("Cancel Task", controller.view.actionHintLabel.text)
 
     def test_refresh_action_states_relabels_preview_when_multimedia_unavailable(self):
         controller = MainController.__new__(MainController)
