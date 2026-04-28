@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -17,11 +18,15 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtCore import Qt
 
-from app.model.api.azure_tts_api import AzureTTSAPI
 from app.model.app_settings import AppSettings
-from app.model.ssml.ssml_config import SSMLConfig
+from app.model.tts_providers import (
+    TTSProviderConfig,
+    TTSRequest,
+    create_tts_provider,
+    get_provider_display_name,
+    get_voice_suggestions,
+)
 
 
 class SettingsEditor(QWidget):
@@ -36,11 +41,22 @@ class SettingsEditor(QWidget):
     RANGE_OPTIONS = ["default", "x-low", "low", "medium", "high", "x-high"]
     PAUSE_OPTIONS = ["none", "250ms", "500ms", "1s", "2s"]
     PAUSE_POSITION_OPTIONS = ["before", "after"]
+    PROVIDERS = (
+        ("azure", "Azure Speech"),
+        ("gemini", "Gemini TTS"),
+        ("local", "Offline Python TTS"),
+        ("polly", "Amazon Polly"),
+    )
+    GEMINI_MODEL_OPTIONS = [
+        "gemini-2.5-flash-tts",
+        "gemini-2.5-pro-tts",
+    ]
+    LOCAL_DRIVER_OPTIONS = ["auto", "sapi5", "nsss", "espeak"]
+    POLLY_ENGINE_OPTIONS = ["standard", "neural", "long-form", "generative"]
 
     def __init__(self, settings, parent=None):
         super().__init__(parent)
         self.settings = AppSettings(**settings.__dict__)
-        self.voice_config = SSMLConfig()
         self._build_ui()
         self._load_settings()
 
@@ -48,8 +64,16 @@ class SettingsEditor(QWidget):
         main_layout = QVBoxLayout(self)
         form_layout = QFormLayout()
 
+        self.provider_combo = QComboBox(self)
+        for provider_name, label in self.PROVIDERS:
+            self.provider_combo.addItem(label, provider_name)
+        self.provider_combo.currentIndexChanged.connect(
+            self._handle_provider_changed
+        )
+        form_layout.addRow("TTS Provider", self.provider_combo)
+
         self.voice_combo = QComboBox(self)
-        self.voice_combo.addItems(self.voice_config.list_voices())
+        self.voice_combo.setEditable(True)
         form_layout.addRow("Voice", self.voice_combo)
 
         self.azure_key_edit = QLineEdit(self)
@@ -59,6 +83,70 @@ class SettingsEditor(QWidget):
         self.azure_region_edit = QLineEdit(self)
         self.azure_region_edit.setPlaceholderText("eastus")
         form_layout.addRow("Azure Region", self.azure_region_edit)
+
+        gemini_path_row = QHBoxLayout()
+        self.gemini_config_path_edit = QLineEdit(self)
+        self.gemini_config_path_edit.setPlaceholderText(".gemini.env")
+        self.gemini_config_browse_button = QPushButton("Browse", self)
+        self.gemini_config_browse_button.clicked.connect(
+            self._choose_gemini_config_file
+        )
+        gemini_path_row.addWidget(self.gemini_config_path_edit)
+        gemini_path_row.addWidget(self.gemini_config_browse_button)
+        form_layout.addRow("Gemini Config File", gemini_path_row)
+
+        self.gemini_model_combo = QComboBox(self)
+        self.gemini_model_combo.addItems(self.GEMINI_MODEL_OPTIONS)
+        self.gemini_model_combo.currentIndexChanged.connect(
+            self._handle_provider_changed
+        )
+        form_layout.addRow("Gemini Model", self.gemini_model_combo)
+
+        self.gemini_language_code_edit = QLineEdit(self)
+        self.gemini_language_code_edit.setPlaceholderText("en-US")
+        form_layout.addRow("Gemini Language", self.gemini_language_code_edit)
+
+        self.gemini_style_prompt_edit = QLineEdit(self)
+        self.gemini_style_prompt_edit.setPlaceholderText(
+            "Say the following in a curious, warm, conversational way."
+        )
+        form_layout.addRow("Gemini Style Prompt", self.gemini_style_prompt_edit)
+
+        local_path_row = QHBoxLayout()
+        self.local_tts_config_path_edit = QLineEdit(self)
+        self.local_tts_config_path_edit.setPlaceholderText(".local_tts.env")
+        self.local_tts_config_browse_button = QPushButton("Browse", self)
+        self.local_tts_config_browse_button.clicked.connect(
+            self._choose_local_tts_config_file
+        )
+        local_path_row.addWidget(self.local_tts_config_path_edit)
+        local_path_row.addWidget(self.local_tts_config_browse_button)
+        form_layout.addRow("Local TTS Config File", local_path_row)
+
+        self.local_tts_driver_combo = QComboBox(self)
+        self.local_tts_driver_combo.addItems(self.LOCAL_DRIVER_OPTIONS)
+        self.local_tts_driver_combo.currentIndexChanged.connect(
+            self._handle_provider_changed
+        )
+        form_layout.addRow("Local TTS Driver", self.local_tts_driver_combo)
+
+        polly_path_row = QHBoxLayout()
+        self.polly_config_path_edit = QLineEdit(self)
+        self.polly_config_path_edit.setPlaceholderText(".polly.env")
+        self.polly_config_browse_button = QPushButton("Browse", self)
+        self.polly_config_browse_button.clicked.connect(
+            self._choose_polly_config_file
+        )
+        polly_path_row.addWidget(self.polly_config_path_edit)
+        polly_path_row.addWidget(self.polly_config_browse_button)
+        form_layout.addRow("Polly Config File", polly_path_row)
+
+        self.polly_engine_combo = QComboBox(self)
+        self.polly_engine_combo.addItems(self.POLLY_ENGINE_OPTIONS)
+        self.polly_engine_combo.currentIndexChanged.connect(
+            self._handle_provider_changed
+        )
+        form_layout.addRow("Polly Engine", self.polly_engine_combo)
 
         self.rate_combo = QComboBox(self)
         self.rate_combo.addItems(self.RATE_OPTIONS)
@@ -140,14 +228,22 @@ class SettingsEditor(QWidget):
         self.test_connection_button.clicked.connect(self._test_connection)
         connection_row.addWidget(self.test_connection_button)
         connection_row.addWidget(self.connection_status_label)
-        form_layout.addRow("Azure Status", connection_row)
+        form_layout.addRow("Provider Status", connection_row)
 
         main_layout.addLayout(form_layout)
 
     def _load_settings(self):
-        self.voice_combo.setCurrentText(self.settings.voice)
+        self._set_provider(self.settings.tts_provider)
         self.azure_key_edit.setText(self.settings.azure_key)
         self.azure_region_edit.setText(self.settings.azure_region)
+        self.gemini_config_path_edit.setText(self.settings.gemini_config_path)
+        self.gemini_model_combo.setCurrentText(self.settings.gemini_model)
+        self.gemini_language_code_edit.setText(self.settings.gemini_language_code)
+        self.gemini_style_prompt_edit.setText(self.settings.gemini_style_prompt)
+        self.local_tts_config_path_edit.setText(self.settings.local_tts_config_path)
+        self.local_tts_driver_combo.setCurrentText(self.settings.local_tts_driver_name)
+        self.polly_config_path_edit.setText(self.settings.polly_config_path)
+        self.polly_engine_combo.setCurrentText(self.settings.polly_engine)
         self.rate_combo.setCurrentText(self.settings.speaking_rate)
         self.synthesis_volume_combo.setCurrentText(self.settings.synthesis_volume)
         self.emphasis_combo.setCurrentText(self.settings.emphasis_level)
@@ -170,10 +266,21 @@ class SettingsEditor(QWidget):
         self.advanced_group.setChecked(show_advanced)
         self._toggle_advanced_controls(show_advanced)
         self._update_playback_label(self.settings.playback_volume)
+        self._refresh_voice_options(preferred_voice=self.settings.voice)
+        self._refresh_provider_controls()
 
     def set_settings(self, settings):
         self.settings = AppSettings(**settings.__dict__)
         self._load_settings()
+
+    def _set_provider(self, provider_name):
+        provider_index = self.provider_combo.findData(provider_name)
+        if provider_index == -1:
+            provider_index = 0
+        self.provider_combo.setCurrentIndex(provider_index)
+
+    def _current_provider_name(self):
+        return self.provider_combo.currentData() or "azure"
 
     def _update_playback_label(self, value):
         self.playback_volume_label.setText(f"{value}%")
@@ -186,6 +293,36 @@ class SettingsEditor(QWidget):
         )
         if chosen_dir:
             self.output_dir_edit.setText(chosen_dir)
+
+    def _choose_polly_config_file(self):
+        chosen_file, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose Amazon Polly Config File",
+            str(Path.cwd()),
+            "INI Files (*.ini *.env *.cfg);;All Files (*.*)",
+        )
+        if chosen_file:
+            self.polly_config_path_edit.setText(chosen_file)
+
+    def _choose_gemini_config_file(self):
+        chosen_file, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose Gemini TTS Config File",
+            str(Path.cwd()),
+            "INI Files (*.ini *.env *.cfg);;All Files (*.*)",
+        )
+        if chosen_file:
+            self.gemini_config_path_edit.setText(chosen_file)
+
+    def _choose_local_tts_config_file(self):
+        chosen_file, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose Local TTS Config File",
+            str(Path.cwd()),
+            "INI Files (*.ini *.env *.cfg);;All Files (*.*)",
+        )
+        if chosen_file:
+            self.local_tts_config_path_edit.setText(chosen_file)
 
     def get_settings(self):
         """
@@ -200,9 +337,50 @@ class SettingsEditor(QWidget):
             )
             return None
 
-        self.settings.voice = self.voice_combo.currentText()
+        if self._current_provider_name() == "polly":
+            polly_config_path = self.polly_config_path_edit.text().strip()
+            if not polly_config_path:
+                QMessageBox.warning(
+                    self,
+                    "Missing Polly Config",
+                    "Choose the dedicated Amazon Polly config file before applying settings.",
+                )
+                return None
+
+        if self._current_provider_name() == "gemini":
+            gemini_config_path = self.gemini_config_path_edit.text().strip()
+            if not gemini_config_path:
+                QMessageBox.warning(
+                    self,
+                    "Missing Gemini Config",
+                    "Choose the dedicated Gemini config file before applying settings.",
+                )
+                return None
+
+        self.settings.tts_provider = self._current_provider_name()
+        self.settings.voice = self.voice_combo.currentText().strip()
         self.settings.azure_key = self.azure_key_edit.text().strip()
         self.settings.azure_region = self.azure_region_edit.text().strip()
+        self.settings.gemini_config_path = (
+            self.gemini_config_path_edit.text().strip() or ".gemini.env"
+        )
+        self.settings.gemini_model = self.gemini_model_combo.currentText()
+        self.settings.gemini_language_code = (
+            self.gemini_language_code_edit.text().strip() or "en-US"
+        )
+        self.settings.gemini_style_prompt = (
+            self.gemini_style_prompt_edit.text().strip()
+        )
+        self.settings.local_tts_config_path = (
+            self.local_tts_config_path_edit.text().strip() or ".local_tts.env"
+        )
+        self.settings.local_tts_driver_name = (
+            self.local_tts_driver_combo.currentText()
+        )
+        self.settings.polly_config_path = (
+            self.polly_config_path_edit.text().strip() or ".polly.env"
+        )
+        self.settings.polly_engine = self.polly_engine_combo.currentText()
         self.settings.speaking_rate = self.rate_combo.currentText()
         self.settings.synthesis_volume = (
             self.synthesis_volume_combo.currentText()
@@ -218,26 +396,194 @@ class SettingsEditor(QWidget):
         self.settings.logging_enabled = self.logging_checkbox.isChecked()
         return self.settings
 
-    def _test_connection(self):
-        azure_key = self.azure_key_edit.text().strip()
-        azure_region = self.azure_region_edit.text().strip()
-        if not azure_key or not azure_region:
-            QMessageBox.warning(
-                self,
-                "Missing Azure Settings",
-                "Enter both the Azure key and region before testing the connection.",
+    def _handle_provider_changed(self):
+        self._refresh_provider_controls()
+        current_voice = self.voice_combo.currentText().strip()
+        suggestions = set(get_voice_suggestions(self._current_provider_name()))
+        preferred_voice = current_voice if current_voice in suggestions else ""
+        self._refresh_voice_options(preferred_voice=preferred_voice)
+        self.connection_status_label.setText("Not tested")
+
+    def _refresh_provider_controls(self):
+        using_azure = self._current_provider_name() == "azure"
+        using_gemini = self._current_provider_name() == "gemini"
+        using_local = self._current_provider_name() == "local"
+        using_polly = self._current_provider_name() == "polly"
+
+        self.azure_key_edit.setEnabled(using_azure)
+        self.azure_region_edit.setEnabled(using_azure)
+        self.gemini_config_path_edit.setEnabled(using_gemini)
+        self.gemini_config_browse_button.setEnabled(using_gemini)
+        self.gemini_model_combo.setEnabled(using_gemini)
+        self.gemini_language_code_edit.setEnabled(using_gemini)
+        self.gemini_style_prompt_edit.setEnabled(using_gemini)
+        self.local_tts_config_path_edit.setEnabled(using_local)
+        self.local_tts_config_browse_button.setEnabled(using_local)
+        self.local_tts_driver_combo.setEnabled(using_local)
+        self.polly_config_path_edit.setEnabled(using_polly)
+        self.polly_config_browse_button.setEnabled(using_polly)
+        self.polly_engine_combo.setEnabled(using_polly)
+        self.test_connection_button.setText(
+            f"Test {get_provider_display_name(self._current_provider_name())}"
+        )
+
+    def _refresh_voice_options(self, preferred_voice=""):
+        suggestions = list(get_voice_suggestions(self._current_provider_name()))
+        current_voice = preferred_voice.strip()
+        self.voice_combo.blockSignals(True)
+        self.voice_combo.clear()
+        self.voice_combo.addItems(suggestions)
+        if current_voice and current_voice not in suggestions:
+            self.voice_combo.addItem(current_voice)
+        if current_voice:
+            self.voice_combo.setCurrentText(current_voice)
+        elif suggestions:
+            self.voice_combo.setCurrentText(suggestions[0])
+        self.voice_combo.blockSignals(False)
+
+    def _build_provider_config(self):
+        provider_name = self._current_provider_name()
+        if provider_name == "azure":
+            azure_key = self.azure_key_edit.text().strip()
+            azure_region = self.azure_region_edit.text().strip()
+            if not azure_key or not azure_region:
+                raise ValueError(
+                    "Enter both the Azure key and region before testing the connection."
+                )
+            return TTSProviderConfig(
+                provider_name="azure",
+                credentials={
+                    "subscription_key": azure_key,
+                    "region": azure_region,
+                },
             )
-            self.connection_status_label.setText("Missing credentials")
-            return
+
+        if provider_name == "gemini":
+            gemini_config_path = self.gemini_config_path_edit.text().strip()
+            if not gemini_config_path:
+                raise ValueError(
+                    "Choose the dedicated Gemini config file before testing the connection."
+                )
+
+            from app.model.api.gemini_config import get_gemini_settings
+
+            return TTSProviderConfig(
+                provider_name="gemini",
+                credentials=get_gemini_settings(gemini_config_path),
+                api_config_path=gemini_config_path,
+                options={
+                    "model": self.gemini_model_combo.currentText(),
+                    "language_code": (
+                        self.gemini_language_code_edit.text().strip() or "en-US"
+                    ),
+                    "style_prompt": self.gemini_style_prompt_edit.text().strip(),
+                },
+            )
+
+        if provider_name == "local":
+            local_tts_config_path = self.local_tts_config_path_edit.text().strip()
+            options = {
+                "driver_name": self.local_tts_driver_combo.currentText(),
+            }
+            if local_tts_config_path:
+                from app.model.api.local_tts_config import get_local_tts_settings
+
+                try:
+                    file_settings = get_local_tts_settings(local_tts_config_path)
+                except FileNotFoundError:
+                    file_settings = None
+                if file_settings is not None:
+                    options["driver_name"] = file_settings.get(
+                        "driver_name",
+                        options["driver_name"],
+                    )
+
+            return TTSProviderConfig(
+                provider_name="local",
+                credentials={},
+                api_config_path=local_tts_config_path or ".local_tts.env",
+                options=options,
+            )
+
+        polly_config_path = self.polly_config_path_edit.text().strip()
+        if not polly_config_path:
+            raise ValueError(
+                "Choose the dedicated Amazon Polly config file before testing the connection."
+            )
+
+        from app.model.api.polly_config import get_polly_settings
+
+        return TTSProviderConfig(
+            provider_name="polly",
+            credentials=get_polly_settings(polly_config_path),
+            api_config_path=polly_config_path,
+            options={"engine": self.polly_engine_combo.currentText()},
+        )
+
+    def _test_connection(self):
+        provider_name = self._current_provider_name()
+        provider_display_name = get_provider_display_name(provider_name)
 
         try:
-            client = AzureTTSAPI(azure_key, azure_region)
-            audio_data = client.get_audio_from_text("Connection test.")
+            provider_config = self._build_provider_config()
+            provider = create_tts_provider(provider_config)
+            if provider_name in {"gemini", "local", "polly"}:
+                voices = provider.list_voices(
+                    engine=(
+                        self.polly_engine_combo.currentText()
+                        if provider_name == "polly"
+                        else (
+                            self.gemini_model_combo.currentText()
+                            if provider_name == "gemini"
+                            else self.local_tts_driver_combo.currentText()
+                        )
+                    )
+                )
+                if voices:
+                    self._refresh_voice_options(
+                        preferred_voice=self.voice_combo.currentText()
+                    )
+                    current_voice = self.voice_combo.currentText().strip()
+                    self.voice_combo.clear()
+                    self.voice_combo.addItems(list(voices))
+                    if current_voice and current_voice not in voices:
+                        self.voice_combo.addItem(current_voice)
+                    self.voice_combo.setCurrentText(current_voice or voices[0])
+
+            voice_name = self.voice_combo.currentText().strip()
+            metadata = {}
+            if provider_name == "polly":
+                metadata["engine"] = self.polly_engine_combo.currentText()
+            elif provider_name == "gemini":
+                metadata.update(
+                    {
+                        "model": self.gemini_model_combo.currentText(),
+                        "language_code": (
+                            self.gemini_language_code_edit.text().strip()
+                            or "en-US"
+                        ),
+                        "style_prompt": self.gemini_style_prompt_edit.text().strip(),
+                    }
+                )
+            elif provider_name == "local":
+                metadata.update(
+                    {
+                        "rate": 150,
+                        "volume": 1.0,
+                    }
+                )
+            audio_data = provider.synthesize(
+                TTSRequest(
+                    text="Connection test.",
+                    voice=voice_name or None,
+                    metadata=metadata,
+                )
+            ).audio_data
         except Exception as error:
             QMessageBox.critical(
                 self,
                 "Connection Failed",
-                f"Unable to validate the Azure Speech configuration.\n\n{error}",
+                f"Unable to validate the {provider_display_name} configuration.\n\n{error}",
             )
             self.connection_status_label.setText("Connection failed")
             return
@@ -247,7 +593,7 @@ class SettingsEditor(QWidget):
             QMessageBox.information(
                 self,
                 "Connection Successful",
-                "Azure Speech credentials are valid.",
+                f"{provider_display_name} settings are valid.",
             )
         else:
             self.connection_status_label.setText("No audio returned")

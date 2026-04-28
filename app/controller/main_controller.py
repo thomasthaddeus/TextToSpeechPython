@@ -25,17 +25,22 @@ except ImportError:  # pragma: no cover - optional multimedia backend
 from app.controller.background_workers import (
     BatchExportWorker,
     DocumentParseWorker,
+    build_provider_input,
+    build_provider_metadata,
     build_ssml_document,
     sanitize_batch_name,
 )
 from app.controller.second_controller import SecondController
 from app.controller.settings_controller import SettingsController
 from app.gui.second_window import SecondApp
-from app.model.api.api_config import get_api_settings
 from app.model.app_settings import AppSettings
 from app.model.processors.tts_processor import TTSProcessor
 from app.model.scraper.document_scraper import DocumentScraper
 from app.model.ssml.ssml_config import SSMLConfig
+from app.model.tts_providers import (
+    get_provider_display_name,
+    resolve_tts_provider_config,
+)
 from app.utils.logging_config import configure_logging
 from app.utils.text_cleaner import TextCleaner
 
@@ -45,6 +50,7 @@ class MainController(QObject):
     AUDIO_HISTORY_PATH = Path("data/dynamic/audio_history.json")
     MAX_HISTORY_ITEMS = 10
     HISTORY_SETTINGS_FIELDS = (
+        "tts_provider",
         "voice",
         "speaking_rate",
         "synthesis_volume",
@@ -54,6 +60,14 @@ class MainController(QObject):
         "pause_duration",
         "pause_position",
         "auto_clean_text",
+        "gemini_model",
+        "gemini_language_code",
+        "gemini_style_prompt",
+        "gemini_config_path",
+        "local_tts_driver_name",
+        "local_tts_config_path",
+        "polly_engine",
+        "polly_config_path",
         "output_dir",
     )
 
@@ -142,6 +156,7 @@ class MainController(QObject):
         self.view.outputStatusLabel.setText(
             " | ".join(
                 (
+                    f"Provider: {self._provider_display_name()}",
                     f"Voice: {self.settings.voice}",
                     f"Rate: {self.settings.speaking_rate}",
                     f"Speech Volume: {self.settings.synthesis_volume}",
@@ -155,12 +170,13 @@ class MainController(QObject):
         )
         self.view.sidebarSettingsEditor.set_settings(self.settings)
         self._refresh_action_states()
-        azure_key, azure_region = self._resolve_azure_credentials()
-        if azure_key and azure_region:
+        provider_config = self._resolve_tts_provider_config()
+        if provider_config is not None:
             self.view.statusbar.showMessage("Ready")
         else:
+            provider_name = self._provider_display_name()
             self.view.statusbar.showMessage(
-                "Ready, but Azure Speech is not configured."
+                f"Ready, but {provider_name} is not configured."
             )
         self._updating_ui_state = False
 
@@ -509,30 +525,31 @@ class MainController(QObject):
         self.view.statusbar.showMessage("Restored history text and settings.")
         logger.info("Restored text/settings from audio history entry.")
 
-    def _resolve_azure_credentials(self):
-        if self.settings.azure_key and self.settings.azure_region:
-            return self.settings.azure_key, self.settings.azure_region
+    def _provider_display_name(self):
+        provider_name = getattr(self.settings, "tts_provider", "azure")
+        return get_provider_display_name(provider_name)
 
+    def _resolve_tts_provider_config(self):
         try:
-            return get_api_settings(".env")
+            return resolve_tts_provider_config(self.settings, ".env")
         except Exception as error:
-            logger.warning("Azure config unavailable: {}", error)
-            return None, None
+            logger.warning("TTS provider config unavailable: {}", error)
+            return None
 
     def _ensure_tts_processor(self):
-        azure_key, azure_region = self._resolve_azure_credentials()
-        if not azure_key or not azure_region:
+        provider_config = self._resolve_tts_provider_config()
+        if provider_config is None:
             return None
 
         if self.tts_processor is None:
-            self.tts_processor = TTSProcessor(
-                azure_key=azure_key,
-                azure_region=azure_region,
-            )
+            self.tts_processor = TTSProcessor(provider_config=provider_config)
         return self.tts_processor
 
     def _build_ssml(self, text):
         return build_ssml_document(text, self.settings, self.cleaner)
+
+    def _provider_request_metadata(self):
+        return build_provider_metadata(self.settings)
 
     def _combine_document_rows(self, rows, content_mode="prefer_secondary"):
         chunks = []
@@ -598,24 +615,33 @@ class MainController(QObject):
     def _synthesize_text(self, text):
         tts_processor = self._ensure_tts_processor()
         if tts_processor is None:
+            provider_name = self._provider_display_name()
             QMessageBox.warning(
                 self.view,
-                "Azure Setup Required",
+                f"{provider_name} Setup Required",
                 (
-                    "The application could not find valid Azure Speech credentials.\n\n"
-                    "Open Tools > Settings, enter your Azure key and region, "
+                    f"The application could not find valid {provider_name} credentials.\n\n"
+                    "Open Tools > Settings, enter the configured provider credentials, "
                     "and click Apply, or create a valid .env file."
                 ),
             )
             self.view.statusbar.showMessage(
-                "Azure credentials are required before generating speech."
+                f"{provider_name} credentials are required before generating speech."
             )
             return None
 
         try:
+            provider_input, use_ssml = build_provider_input(
+                text,
+                self.settings,
+                tts_processor.get_capabilities(),
+                self.cleaner,
+            )
             return tts_processor.text_to_speech(
-                self._build_ssml(text),
-                use_ssml=True,
+                provider_input,
+                use_ssml=use_ssml,
+                voice=self.settings.voice,
+                metadata=self._provider_request_metadata(),
             )
         except Exception as error:
             logger.exception("Speech generation failed: {}", error)
@@ -716,19 +742,20 @@ class MainController(QObject):
             )
             return
 
-        azure_key, azure_region = self._resolve_azure_credentials()
-        if not azure_key or not azure_region:
+        provider_config = self._resolve_tts_provider_config()
+        if provider_config is None:
+            provider_name = self._provider_display_name()
             QMessageBox.warning(
                 self.view,
-                "Azure Setup Required",
+                f"{provider_name} Setup Required",
                 (
-                    "The application could not find valid Azure Speech credentials.\n\n"
-                    "Open Tools > Settings, enter your Azure key and region, "
+                    f"The application could not find valid {provider_name} credentials.\n\n"
+                    "Open Tools > Settings, enter the configured provider credentials, "
                     "and click Apply, or create a valid .env file."
                 ),
             )
             self.view.statusbar.showMessage(
-                "Azure credentials are required before batch export."
+                f"{provider_name} credentials are required before batch export."
             )
             return
 
@@ -752,8 +779,7 @@ class MainController(QObject):
             rows=rows,
             output_dir=selected_dir,
             settings=self.settings,
-            azure_key=azure_key,
-            azure_region=azure_region,
+            provider_config=provider_config,
         )
         self.batch_export_worker.moveToThread(self.batch_export_thread)
         self.batch_export_thread.started.connect(self.batch_export_worker.run)
@@ -1127,7 +1153,7 @@ class MainController(QObject):
             "About Text To Speech",
             (
                 "Text To Speech is a PyQt desktop app for experimenting with "
-                "Azure speech synthesis, SSML previewing, and multi-format document imports."
+                "provider-backed speech synthesis, SSML previewing, and multi-format document imports."
             ),
         )
 

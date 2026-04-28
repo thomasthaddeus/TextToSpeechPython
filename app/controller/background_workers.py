@@ -9,14 +9,15 @@ from loguru import logger
 from app.model.app_settings import AppSettings
 from app.model.scraper.document_scraper import DocumentScraper
 from app.model.ssml.text_to_ssml import TextToSSML
+from app.model.tts_providers import get_provider_display_name
 from app.utils.text_cleaner import TextCleaner
 
 
-def create_tts_processor(azure_key, azure_region):
-    """Create the Azure TTS processor only when audio generation is requested."""
+def create_tts_processor(provider_config):
+    """Create the TTS processor only when audio generation is requested."""
     from app.model.processors.tts_processor import TTSProcessor
 
-    return TTSProcessor(azure_key=azure_key, azure_region=azure_region)
+    return TTSProcessor(provider_config=provider_config)
 
 
 def sanitize_batch_name(value):
@@ -61,6 +62,66 @@ def build_ssml_document(text, settings, cleaner=None):
 
     prosody_text = f"<prosody {' '.join(prosody_attributes)}>{ssml_content}</prosody>"
     return TextToSSML(voice_name=settings.voice).convert(prosody_text)
+
+
+def build_provider_input(text, settings, provider_capabilities, cleaner=None):
+    """Build either SSML or plain text depending on provider capabilities."""
+    if provider_capabilities.supports_ssml:
+        return build_ssml_document(text, settings, cleaner), True
+
+    working_text = text
+    text_cleaner = cleaner or TextCleaner()
+    if settings.auto_clean_text:
+        working_text = text_cleaner.clean_all(working_text)
+    return working_text, False
+
+
+def build_provider_metadata(settings):
+    """Build provider-specific synthesis metadata from saved settings."""
+    provider_name = getattr(settings, "tts_provider", "azure")
+    if provider_name == "local":
+        return {
+            "rate": map_speaking_rate_to_local_value(
+                getattr(settings, "speaking_rate", "medium")
+            ),
+            "volume": map_volume_to_local_value(
+                getattr(settings, "synthesis_volume", "medium")
+            ),
+        }
+    if provider_name == "gemini":
+        return {
+            "style_prompt": getattr(settings, "gemini_style_prompt", ""),
+            "language_code": getattr(settings, "gemini_language_code", "en-US"),
+            "model": getattr(settings, "gemini_model", "gemini-2.5-flash-tts"),
+        }
+    if provider_name == "polly":
+        return {
+            "engine": getattr(settings, "polly_engine", "neural"),
+        }
+    return {}
+
+
+def map_speaking_rate_to_local_value(rate_name):
+    """Map app speaking-rate labels onto a reasonable local pyttsx3 rate."""
+    return {
+        "x-slow": 110,
+        "slow": 140,
+        "medium": 175,
+        "fast": 210,
+        "x-fast": 245,
+    }.get(rate_name, 175)
+
+
+def map_volume_to_local_value(volume_name):
+    """Map app volume labels onto the local 0.0-1.0 pyttsx3 volume range."""
+    return {
+        "silent": 0.0,
+        "x-soft": 0.2,
+        "soft": 0.4,
+        "medium": 0.6,
+        "loud": 0.8,
+        "x-loud": 1.0,
+    }.get(volume_name, 0.6)
 
 
 class DocumentParseWorker(QObject):
@@ -118,13 +179,12 @@ class BatchExportWorker(QObject):
     failed = pyqtSignal(str, object)
     cancelled = pyqtSignal(object)
 
-    def __init__(self, rows, output_dir, settings, azure_key, azure_region):
+    def __init__(self, rows, output_dir, settings, provider_config):
         super().__init__()
         self.rows = [dict(row) for row in rows]
         self.output_dir = Path(output_dir)
         self.settings = AppSettings(**vars(settings))
-        self.azure_key = azure_key
-        self.azure_region = azure_region
+        self.provider_config = provider_config
         self._cancel_requested = False
 
     def request_cancel(self):
@@ -137,8 +197,11 @@ class BatchExportWorker(QObject):
                 self.cancelled.emit(exported_files)
                 return
 
-            if not self.azure_key or not self.azure_region:
-                raise RuntimeError("Azure Speech credentials are required.")
+            if self.provider_config is None:
+                provider_name = get_provider_display_name(
+                    getattr(self.settings, "tts_provider", "azure")
+                )
+                raise RuntimeError(f"{provider_name} credentials are required.")
 
             exportable_rows = [
                 row for row in self.rows if (row.get("resolved_text") or "").strip()
@@ -148,7 +211,7 @@ class BatchExportWorker(QObject):
                 return
 
             self.output_dir.mkdir(parents=True, exist_ok=True)
-            processor = create_tts_processor(self.azure_key, self.azure_region)
+            processor = create_tts_processor(self.provider_config)
             cleaner = TextCleaner()
             total_rows = len(exportable_rows)
 
@@ -158,8 +221,18 @@ class BatchExportWorker(QObject):
                     return
 
                 resolved_text = (row.get("resolved_text") or "").strip()
-                ssml = build_ssml_document(resolved_text, self.settings, cleaner)
-                audio_data = processor.text_to_speech(ssml, use_ssml=True)
+                provider_input, use_ssml = build_provider_input(
+                    resolved_text,
+                    self.settings,
+                    processor.get_capabilities(),
+                    cleaner,
+                )
+                audio_data = processor.text_to_speech(
+                    provider_input,
+                    use_ssml=use_ssml,
+                    voice=self.settings.voice,
+                    metadata=build_provider_metadata(self.settings),
+                )
 
                 if self._cancel_requested:
                     self.cancelled.emit(exported_files)
