@@ -64,6 +64,34 @@ def build_ssml_document(text, settings, cleaner=None):
     return TextToSSML(voice_name=settings.voice).convert(prosody_text)
 
 
+def build_provider_input(text, settings, provider_capabilities, cleaner=None):
+    """Build either SSML or plain text depending on provider capabilities."""
+    if provider_capabilities.supports_ssml:
+        return build_ssml_document(text, settings, cleaner), True
+
+    working_text = text
+    text_cleaner = cleaner or TextCleaner()
+    if settings.auto_clean_text:
+        working_text = text_cleaner.clean_all(working_text)
+    return working_text, False
+
+
+def build_provider_metadata(settings):
+    """Build provider-specific synthesis metadata from saved settings."""
+    provider_name = getattr(settings, "tts_provider", "azure")
+    if provider_name == "gemini":
+        return {
+            "style_prompt": getattr(settings, "gemini_style_prompt", ""),
+            "language_code": getattr(settings, "gemini_language_code", "en-US"),
+            "model": getattr(settings, "gemini_model", "gemini-2.5-flash-tts"),
+        }
+    if provider_name == "polly":
+        return {
+            "engine": getattr(settings, "polly_engine", "neural"),
+        }
+    return {}
+
+
 class DocumentParseWorker(QObject):
     """Parse a document or source payload away from the UI thread."""
 
@@ -161,11 +189,17 @@ class BatchExportWorker(QObject):
                     return
 
                 resolved_text = (row.get("resolved_text") or "").strip()
-                ssml = build_ssml_document(resolved_text, self.settings, cleaner)
+                provider_input, use_ssml = build_provider_input(
+                    resolved_text,
+                    self.settings,
+                    processor.get_capabilities(),
+                    cleaner,
+                )
                 audio_data = processor.text_to_speech(
-                    ssml,
-                    use_ssml=True,
+                    provider_input,
+                    use_ssml=use_ssml,
                     voice=self.settings.voice,
+                    metadata=build_provider_metadata(self.settings),
                 )
 
                 if self._cancel_requested:

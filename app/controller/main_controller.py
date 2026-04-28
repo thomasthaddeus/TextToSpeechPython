@@ -25,6 +25,8 @@ except ImportError:  # pragma: no cover - optional multimedia backend
 from app.controller.background_workers import (
     BatchExportWorker,
     DocumentParseWorker,
+    build_provider_input,
+    build_provider_metadata,
     build_ssml_document,
     sanitize_batch_name,
 )
@@ -58,6 +60,10 @@ class MainController(QObject):
         "pause_duration",
         "pause_position",
         "auto_clean_text",
+        "gemini_model",
+        "gemini_language_code",
+        "gemini_style_prompt",
+        "gemini_config_path",
         "polly_engine",
         "polly_config_path",
         "output_dir",
@@ -540,6 +546,9 @@ class MainController(QObject):
     def _build_ssml(self, text):
         return build_ssml_document(text, self.settings, self.cleaner)
 
+    def _provider_request_metadata(self):
+        return build_provider_metadata(self.settings)
+
     def _combine_document_rows(self, rows, content_mode="prefer_secondary"):
         chunks = []
         for row in rows:
@@ -620,10 +629,17 @@ class MainController(QObject):
             return None
 
         try:
+            provider_input, use_ssml = build_provider_input(
+                text,
+                self.settings,
+                tts_processor.get_capabilities(),
+                self.cleaner,
+            )
             return tts_processor.text_to_speech(
-                self._build_ssml(text),
-                use_ssml=True,
+                provider_input,
+                use_ssml=use_ssml,
                 voice=self.settings.voice,
+                metadata=self._provider_request_metadata(),
             )
         except Exception as error:
             logger.exception("Speech generation failed: {}", error)

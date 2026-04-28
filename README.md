@@ -10,9 +10,9 @@ The current application supports:
 
 - editing or pasting source text in the main window
 - live SSML preview generation
-- Azure Speech and Amazon Polly synthesis to preview or exported `.mp3` files
+- Azure Speech, Gemini TTS, and Amazon Polly synthesis to preview or exported `.mp3` files
 - a collapsible settings sidebar for provider selection, Azure credentials,
-  Amazon Polly config, voice, output directory, logging,
+  Gemini config, Amazon Polly config, voice, output directory, logging,
   playback volume, and advanced SSML controls
 - document import for `.txt`, `.docx`, `.pdf`, `.html`, `.htm`, `.rtf`,
   `.epub`, `.xlsx`, `.xls`, `.csv`, `.pptx`, and common image formats
@@ -29,8 +29,8 @@ The current application supports:
 
 - Python 3.11+
 - Poetry
-- Azure Speech resource with a valid key and region, or Amazon Polly AWS
-  credentials in a dedicated Polly config file
+- Azure Speech resource with a valid key and region, a Google Cloud Gemini TTS
+  config file, or Amazon Polly AWS credentials in a dedicated Polly config file
 - Tesseract OCR for scanned PDFs and image imports
 
 ## Installation
@@ -112,6 +112,19 @@ region = us-east-1
 
 Set `TTS Provider` to `Amazon Polly` in the settings sidebar, point the app at
 that config file, and choose the desired Polly engine.
+
+Gemini TTS also uses its own dedicated config file. Example `.gemini.env`:
+
+```ini
+[GEMINI]
+project_id = YOUR_GOOGLE_CLOUD_PROJECT_ID
+service_account_json = C:\path\to\service-account.json
+region = global
+```
+
+Set `TTS Provider` to `Gemini TTS`, point the app at that config file, choose a
+Gemini TTS model, and optionally provide a natural-language style prompt for
+delivery control.
 
 ## Main Workflow
 

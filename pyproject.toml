@@ -10,6 +10,7 @@ dependencies = [
     "beautifulsoup4",
     "boto3",
     "ebooklib",
+    "google-cloud-texttospeech",
     "loguru",
     "openpyxl",
     "pandas",
@@ -43,6 +44,7 @@ azure-cognitiveservices-speech = "*"
 beautifulsoup4 = "*"
 boto3 = "*"
 ebooklib = "*"
+google-cloud-texttospeech = "*"
 loguru = "*"
 openpyxl = "*"
 pandas = "*"

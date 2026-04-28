@@ -43,8 +43,13 @@ class SettingsEditor(QWidget):
     PAUSE_POSITION_OPTIONS = ["before", "after"]
     PROVIDERS = (
         ("azure", "Azure Speech"),
+        ("gemini", "Gemini TTS"),
         ("polly", "Amazon Polly"),
     )
+    GEMINI_MODEL_OPTIONS = [
+        "gemini-2.5-flash-tts",
+        "gemini-2.5-pro-tts",
+    ]
     POLLY_ENGINE_OPTIONS = ["standard", "neural", "long-form", "generative"]
 
     def __init__(self, settings, parent=None):
@@ -76,6 +81,34 @@ class SettingsEditor(QWidget):
         self.azure_region_edit = QLineEdit(self)
         self.azure_region_edit.setPlaceholderText("eastus")
         form_layout.addRow("Azure Region", self.azure_region_edit)
+
+        gemini_path_row = QHBoxLayout()
+        self.gemini_config_path_edit = QLineEdit(self)
+        self.gemini_config_path_edit.setPlaceholderText(".gemini.env")
+        self.gemini_config_browse_button = QPushButton("Browse", self)
+        self.gemini_config_browse_button.clicked.connect(
+            self._choose_gemini_config_file
+        )
+        gemini_path_row.addWidget(self.gemini_config_path_edit)
+        gemini_path_row.addWidget(self.gemini_config_browse_button)
+        form_layout.addRow("Gemini Config File", gemini_path_row)
+
+        self.gemini_model_combo = QComboBox(self)
+        self.gemini_model_combo.addItems(self.GEMINI_MODEL_OPTIONS)
+        self.gemini_model_combo.currentIndexChanged.connect(
+            self._handle_provider_changed
+        )
+        form_layout.addRow("Gemini Model", self.gemini_model_combo)
+
+        self.gemini_language_code_edit = QLineEdit(self)
+        self.gemini_language_code_edit.setPlaceholderText("en-US")
+        form_layout.addRow("Gemini Language", self.gemini_language_code_edit)
+
+        self.gemini_style_prompt_edit = QLineEdit(self)
+        self.gemini_style_prompt_edit.setPlaceholderText(
+            "Say the following in a curious, warm, conversational way."
+        )
+        form_layout.addRow("Gemini Style Prompt", self.gemini_style_prompt_edit)
 
         polly_path_row = QHBoxLayout()
         self.polly_config_path_edit = QLineEdit(self)
@@ -183,6 +216,10 @@ class SettingsEditor(QWidget):
         self._set_provider(self.settings.tts_provider)
         self.azure_key_edit.setText(self.settings.azure_key)
         self.azure_region_edit.setText(self.settings.azure_region)
+        self.gemini_config_path_edit.setText(self.settings.gemini_config_path)
+        self.gemini_model_combo.setCurrentText(self.settings.gemini_model)
+        self.gemini_language_code_edit.setText(self.settings.gemini_language_code)
+        self.gemini_style_prompt_edit.setText(self.settings.gemini_style_prompt)
         self.polly_config_path_edit.setText(self.settings.polly_config_path)
         self.polly_engine_combo.setCurrentText(self.settings.polly_engine)
         self.rate_combo.setCurrentText(self.settings.speaking_rate)
@@ -245,6 +282,16 @@ class SettingsEditor(QWidget):
         if chosen_file:
             self.polly_config_path_edit.setText(chosen_file)
 
+    def _choose_gemini_config_file(self):
+        chosen_file, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose Gemini TTS Config File",
+            str(Path.cwd()),
+            "INI Files (*.ini *.env *.cfg);;All Files (*.*)",
+        )
+        if chosen_file:
+            self.gemini_config_path_edit.setText(chosen_file)
+
     def get_settings(self):
         """
         Build a validated settings object from the dialog state.
@@ -268,10 +315,30 @@ class SettingsEditor(QWidget):
                 )
                 return None
 
+        if self._current_provider_name() == "gemini":
+            gemini_config_path = self.gemini_config_path_edit.text().strip()
+            if not gemini_config_path:
+                QMessageBox.warning(
+                    self,
+                    "Missing Gemini Config",
+                    "Choose the dedicated Gemini config file before applying settings.",
+                )
+                return None
+
         self.settings.tts_provider = self._current_provider_name()
         self.settings.voice = self.voice_combo.currentText().strip()
         self.settings.azure_key = self.azure_key_edit.text().strip()
         self.settings.azure_region = self.azure_region_edit.text().strip()
+        self.settings.gemini_config_path = (
+            self.gemini_config_path_edit.text().strip() or ".gemini.env"
+        )
+        self.settings.gemini_model = self.gemini_model_combo.currentText()
+        self.settings.gemini_language_code = (
+            self.gemini_language_code_edit.text().strip() or "en-US"
+        )
+        self.settings.gemini_style_prompt = (
+            self.gemini_style_prompt_edit.text().strip()
+        )
         self.settings.polly_config_path = (
             self.polly_config_path_edit.text().strip() or ".polly.env"
         )
@@ -301,10 +368,16 @@ class SettingsEditor(QWidget):
 
     def _refresh_provider_controls(self):
         using_azure = self._current_provider_name() == "azure"
+        using_gemini = self._current_provider_name() == "gemini"
         using_polly = self._current_provider_name() == "polly"
 
         self.azure_key_edit.setEnabled(using_azure)
         self.azure_region_edit.setEnabled(using_azure)
+        self.gemini_config_path_edit.setEnabled(using_gemini)
+        self.gemini_config_browse_button.setEnabled(using_gemini)
+        self.gemini_model_combo.setEnabled(using_gemini)
+        self.gemini_language_code_edit.setEnabled(using_gemini)
+        self.gemini_style_prompt_edit.setEnabled(using_gemini)
         self.polly_config_path_edit.setEnabled(using_polly)
         self.polly_config_browse_button.setEnabled(using_polly)
         self.polly_engine_combo.setEnabled(using_polly)
@@ -343,6 +416,28 @@ class SettingsEditor(QWidget):
                 },
             )
 
+        if provider_name == "gemini":
+            gemini_config_path = self.gemini_config_path_edit.text().strip()
+            if not gemini_config_path:
+                raise ValueError(
+                    "Choose the dedicated Gemini config file before testing the connection."
+                )
+
+            from app.model.api.gemini_config import get_gemini_settings
+
+            return TTSProviderConfig(
+                provider_name="gemini",
+                credentials=get_gemini_settings(gemini_config_path),
+                api_config_path=gemini_config_path,
+                options={
+                    "model": self.gemini_model_combo.currentText(),
+                    "language_code": (
+                        self.gemini_language_code_edit.text().strip() or "en-US"
+                    ),
+                    "style_prompt": self.gemini_style_prompt_edit.text().strip(),
+                },
+            )
+
         polly_config_path = self.polly_config_path_edit.text().strip()
         if not polly_config_path:
             raise ValueError(
@@ -365,9 +460,13 @@ class SettingsEditor(QWidget):
         try:
             provider_config = self._build_provider_config()
             provider = create_tts_provider(provider_config)
-            if provider_name == "polly":
+            if provider_name in {"gemini", "polly"}:
                 voices = provider.list_voices(
-                    engine=self.polly_engine_combo.currentText()
+                    engine=(
+                        self.polly_engine_combo.currentText()
+                        if provider_name == "polly"
+                        else self.gemini_model_combo.currentText()
+                    )
                 )
                 if voices:
                     self._refresh_voice_options(
@@ -381,13 +480,25 @@ class SettingsEditor(QWidget):
                     self.voice_combo.setCurrentText(current_voice or voices[0])
 
             voice_name = self.voice_combo.currentText().strip()
+            metadata = {}
+            if provider_name == "polly":
+                metadata["engine"] = self.polly_engine_combo.currentText()
+            elif provider_name == "gemini":
+                metadata.update(
+                    {
+                        "model": self.gemini_model_combo.currentText(),
+                        "language_code": (
+                            self.gemini_language_code_edit.text().strip()
+                            or "en-US"
+                        ),
+                        "style_prompt": self.gemini_style_prompt_edit.text().strip(),
+                    }
+                )
             audio_data = provider.synthesize(
                 TTSRequest(
                     text="Connection test.",
                     voice=voice_name or None,
-                    metadata={
-                        "engine": self.polly_engine_combo.currentText(),
-                    },
+                    metadata=metadata,
                 )
             ).audio_data
         except Exception as error:

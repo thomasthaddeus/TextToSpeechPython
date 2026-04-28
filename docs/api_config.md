@@ -61,4 +61,5 @@ credentials are missing:
 
 See also:
 
+- [Gemini TTS configuration](gemini_config.md)
 - [Amazon Polly configuration](polly_config.md)

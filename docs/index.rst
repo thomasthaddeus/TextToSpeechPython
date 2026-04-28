@@ -16,5 +16,6 @@ Supporting Guides
 -----------------
 
 - `Azure configuration <api_config.md>`_
+- `Gemini TTS configuration <gemini_config.md>`_
 - `Amazon Polly configuration <polly_config.md>`_
 - `SSML attributes reference <ssml_attributes.md>`_

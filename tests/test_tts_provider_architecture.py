@@ -3,6 +3,7 @@ from app.controller.main_controller import MainController
 from app.model.app_settings import AppSettings
 from app.model.processors.tts_processor import TTSProcessor
 from app.model.tts_providers.azure_provider import AzureTTSProvider
+from app.model.tts_providers.gemini_provider import GeminiTTSProvider
 from app.model.tts_providers.polly_provider import PollyTTSProvider
 from app.model.tts_providers.models import (
     TTSProviderCapabilities,
@@ -181,6 +182,80 @@ def test_polly_provider_returns_clear_ssml_errors():
         raise AssertionError("Expected RuntimeError for invalid Polly SSML.")
 
 
+def test_gemini_provider_wraps_google_cloud_tts_and_maps_request():
+    captured = {}
+
+    class FakeResponse:
+        audio_content = b"gemini-audio"
+
+    class FakeGeminiClient:
+        def synthesize_speech(self, **kwargs):
+            captured["request"] = kwargs
+            return FakeResponse()
+
+    provider = GeminiTTSProvider(
+        project_id="sample-project",
+        service_account_json="service-account.json",
+        region="us",
+        model="gemini-2.5-flash-tts",
+        client=FakeGeminiClient(),
+    )
+    result = provider.synthesize(
+        TTSRequest(
+            text="Tell the story clearly.",
+            use_ssml=False,
+            voice="Kore",
+            metadata={
+                "style_prompt": "Say the following in a reflective way.",
+                "language_code": "en-US",
+                "model": "gemini-2.5-pro-tts",
+            },
+        )
+    )
+    capabilities = provider.get_capabilities()
+
+    assert result.audio_data == b"gemini-audio"
+    assert captured["request"]["input"].prompt == (
+        "Say the following in a reflective way."
+    )
+    assert captured["request"]["input"].text == "Tell the story clearly."
+    assert captured["request"]["voice"].name == "Kore"
+    assert captured["request"]["voice"].language_code == "en-US"
+    assert captured["request"]["voice"].model_name == "gemini-2.5-pro-tts"
+    assert capabilities.supports_style_prompt
+    assert capabilities.supports_multi_speaker
+    assert not capabilities.supports_ssml
+    assert "mp3" in capabilities.supported_formats
+    assert capabilities.max_input_size == 8000
+
+
+def test_gemini_provider_rejects_oversized_text():
+    class FakeGeminiClient:
+        def synthesize_speech(self, **kwargs):
+            del kwargs
+            return None
+
+    provider = GeminiTTSProvider(
+        project_id="sample-project",
+        service_account_json="service-account.json",
+        region="global",
+        client=FakeGeminiClient(),
+    )
+
+    try:
+        provider.synthesize(
+            TTSRequest(
+                text="x" * 4001,
+                use_ssml=False,
+                voice="Kore",
+            )
+        )
+    except ValueError as error:
+        assert "4,000-byte limit" in str(error)
+    else:  # pragma: no cover - defensive guard
+        raise AssertionError("Expected Gemini oversized input to raise ValueError.")
+
+
 def test_main_controller_builds_tts_processor_from_provider_config(monkeypatch):
     captured = {}
 
@@ -232,6 +307,9 @@ def test_batch_export_worker_uses_provider_config_for_synthesis(
         def text_to_speech(self, text, use_ssml=False, voice=None, metadata=None):
             captured["synthesis"] = (text, use_ssml, voice, metadata)
             return b"worker-audio"
+
+        def get_capabilities(self):
+            return TTSProviderCapabilities(supports_ssml=True)
 
     def fake_create_tts_processor(provider_config):
         captured["provider_config"] = provider_config

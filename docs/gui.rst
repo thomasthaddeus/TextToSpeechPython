@@ -38,6 +38,10 @@ The settings editor currently supports:
 - Azure key
 - Azure region
 - Azure connection testing
+- dedicated Gemini config file selection
+- Gemini model selection
+- Gemini language code
+- Gemini style prompt
 - dedicated Amazon Polly config file selection
 - Polly engine selection
 - voice selection

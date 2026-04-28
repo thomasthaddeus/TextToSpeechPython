@@ -2,6 +2,7 @@ from pathlib import Path
 
 from app.controller.background_workers import BatchExportWorker, DocumentParseWorker
 from app.model.app_settings import AppSettings
+from app.model.tts_providers.models import TTSProviderCapabilities
 from app.model.tts_providers.models import TTSProviderConfig
 
 
@@ -13,6 +14,9 @@ class FakeTTSProcessor:
         del voice
         del metadata
         return f"audio:{use_ssml}:{text}".encode("utf-8")
+
+    def get_capabilities(self):
+        return TTSProviderCapabilities(supports_ssml=True)
 
 
 def fake_tts_processor(provider_config):
