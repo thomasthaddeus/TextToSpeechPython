@@ -62,20 +62,44 @@ class TTSProcessor:
         """Synthesize a normalized request through the configured provider."""
         provider_request = request
         if request.use_ssml:
+            processed_ssml = self.ssml_processor.process_ssml(request.text)
             provider_request = TTSRequest(
-                text=self.ssml_processor.process_ssml(request.text),
+                text=processed_ssml,
                 use_ssml=True,
-                voice=request.voice,
+                voice=request.voice or self._extract_voice_name_from_ssml(processed_ssml),
                 output_format=request.output_format,
                 metadata=dict(request.metadata),
             )
         return self.provider.synthesize(provider_request)
 
-    def text_to_speech(self, text, use_ssml=False):
+    def text_to_speech(self, text, use_ssml=False, voice=None, metadata=None):
         """Backward-compatible helper that returns synthesized audio bytes."""
-        result = self.synthesize(TTSRequest(text=text, use_ssml=use_ssml))
+        result = self.synthesize(
+            TTSRequest(
+                text=text,
+                use_ssml=use_ssml,
+                voice=voice,
+                metadata=dict(metadata or {}),
+            )
+        )
         return result.audio_data
 
     def get_capabilities(self):
         """Expose provider capability flags to higher-level callers."""
         return self.provider.get_capabilities()
+
+    def list_voices(self, engine=None, language_code=None):
+        """Expose provider voice discovery when supported."""
+        return self.provider.list_voices(engine=engine, language_code=language_code)
+
+    def _extract_voice_name_from_ssml(self, text):
+        marker = 'name="'
+        marker_index = text.find(marker)
+        if marker_index == -1:
+            return None
+        start_index = marker_index + len(marker)
+        end_index = text.find('"', start_index)
+        if end_index == -1:
+            return None
+        voice_name = text[start_index:end_index].strip()
+        return voice_name or None

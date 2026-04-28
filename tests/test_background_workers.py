@@ -9,7 +9,9 @@ class FakeTTSProcessor:
     def __init__(self, provider_config):
         self.provider_config = provider_config
 
-    def text_to_speech(self, text, use_ssml=False):
+    def text_to_speech(self, text, use_ssml=False, voice=None, metadata=None):
+        del voice
+        del metadata
         return f"audio:{use_ssml}:{text}".encode("utf-8")
 
 

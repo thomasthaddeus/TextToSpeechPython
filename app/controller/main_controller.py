@@ -48,6 +48,7 @@ class MainController(QObject):
     AUDIO_HISTORY_PATH = Path("data/dynamic/audio_history.json")
     MAX_HISTORY_ITEMS = 10
     HISTORY_SETTINGS_FIELDS = (
+        "tts_provider",
         "voice",
         "speaking_rate",
         "synthesis_volume",
@@ -57,6 +58,8 @@ class MainController(QObject):
         "pause_duration",
         "pause_position",
         "auto_clean_text",
+        "polly_engine",
+        "polly_config_path",
         "output_dir",
     )
 
@@ -145,6 +148,7 @@ class MainController(QObject):
         self.view.outputStatusLabel.setText(
             " | ".join(
                 (
+                    f"Provider: {self._provider_display_name()}",
                     f"Voice: {self.settings.voice}",
                     f"Rate: {self.settings.speaking_rate}",
                     f"Speech Volume: {self.settings.synthesis_volume}",
@@ -619,6 +623,7 @@ class MainController(QObject):
             return tts_processor.text_to_speech(
                 self._build_ssml(text),
                 use_ssml=True,
+                voice=self.settings.voice,
             )
         except Exception as error:
             logger.exception("Speech generation failed: {}", error)

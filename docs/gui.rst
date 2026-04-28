@@ -34,9 +34,12 @@ across the application.
 
 The settings editor currently supports:
 
+- TTS provider selection
 - Azure key
 - Azure region
 - Azure connection testing
+- dedicated Amazon Polly config file selection
+- Polly engine selection
 - voice selection
 - speaking rate
 - synthesis volume

@@ -25,6 +25,8 @@ class AppSettings:
     tts_provider: str = "azure"
     azure_key: str = ""
     azure_region: str = ""
+    polly_config_path: str = ".polly.env"
+    polly_engine: str = "neural"
     output_dir: str = "data/dynamic/audio"
 
     @classmethod

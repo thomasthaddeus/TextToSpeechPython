@@ -46,6 +46,7 @@ class TTSProviderConfig:
     provider_name: str
     credentials: dict[str, str] = field(default_factory=dict)
     api_config_path: str | None = None
+    options: dict[str, Any] = field(default_factory=dict)
 
 
 class TTSProvider(Protocol):
@@ -58,3 +59,6 @@ class TTSProvider(Protocol):
 
     def get_capabilities(self) -> TTSProviderCapabilities:
         """Describe the provider's supported synthesis features."""
+
+    def list_voices(self, engine=None, language_code=None) -> tuple[str, ...]:
+        """Return available voice identifiers for the provider."""

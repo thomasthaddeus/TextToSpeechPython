@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -17,14 +18,14 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtCore import Qt
 
 from app.model.app_settings import AppSettings
-from app.model.ssml.ssml_config import SSMLConfig
 from app.model.tts_providers import (
     TTSProviderConfig,
     TTSRequest,
     create_tts_provider,
+    get_provider_display_name,
+    get_voice_suggestions,
 )
 
 
@@ -40,11 +41,15 @@ class SettingsEditor(QWidget):
     RANGE_OPTIONS = ["default", "x-low", "low", "medium", "high", "x-high"]
     PAUSE_OPTIONS = ["none", "250ms", "500ms", "1s", "2s"]
     PAUSE_POSITION_OPTIONS = ["before", "after"]
+    PROVIDERS = (
+        ("azure", "Azure Speech"),
+        ("polly", "Amazon Polly"),
+    )
+    POLLY_ENGINE_OPTIONS = ["standard", "neural", "long-form", "generative"]
 
     def __init__(self, settings, parent=None):
         super().__init__(parent)
         self.settings = AppSettings(**settings.__dict__)
-        self.voice_config = SSMLConfig()
         self._build_ui()
         self._load_settings()
 
@@ -52,8 +57,16 @@ class SettingsEditor(QWidget):
         main_layout = QVBoxLayout(self)
         form_layout = QFormLayout()
 
+        self.provider_combo = QComboBox(self)
+        for provider_name, label in self.PROVIDERS:
+            self.provider_combo.addItem(label, provider_name)
+        self.provider_combo.currentIndexChanged.connect(
+            self._handle_provider_changed
+        )
+        form_layout.addRow("TTS Provider", self.provider_combo)
+
         self.voice_combo = QComboBox(self)
-        self.voice_combo.addItems(self.voice_config.list_voices())
+        self.voice_combo.setEditable(True)
         form_layout.addRow("Voice", self.voice_combo)
 
         self.azure_key_edit = QLineEdit(self)
@@ -63,6 +76,24 @@ class SettingsEditor(QWidget):
         self.azure_region_edit = QLineEdit(self)
         self.azure_region_edit.setPlaceholderText("eastus")
         form_layout.addRow("Azure Region", self.azure_region_edit)
+
+        polly_path_row = QHBoxLayout()
+        self.polly_config_path_edit = QLineEdit(self)
+        self.polly_config_path_edit.setPlaceholderText(".polly.env")
+        self.polly_config_browse_button = QPushButton("Browse", self)
+        self.polly_config_browse_button.clicked.connect(
+            self._choose_polly_config_file
+        )
+        polly_path_row.addWidget(self.polly_config_path_edit)
+        polly_path_row.addWidget(self.polly_config_browse_button)
+        form_layout.addRow("Polly Config File", polly_path_row)
+
+        self.polly_engine_combo = QComboBox(self)
+        self.polly_engine_combo.addItems(self.POLLY_ENGINE_OPTIONS)
+        self.polly_engine_combo.currentIndexChanged.connect(
+            self._handle_provider_changed
+        )
+        form_layout.addRow("Polly Engine", self.polly_engine_combo)
 
         self.rate_combo = QComboBox(self)
         self.rate_combo.addItems(self.RATE_OPTIONS)
@@ -144,14 +175,16 @@ class SettingsEditor(QWidget):
         self.test_connection_button.clicked.connect(self._test_connection)
         connection_row.addWidget(self.test_connection_button)
         connection_row.addWidget(self.connection_status_label)
-        form_layout.addRow("Azure Status", connection_row)
+        form_layout.addRow("Provider Status", connection_row)
 
         main_layout.addLayout(form_layout)
 
     def _load_settings(self):
-        self.voice_combo.setCurrentText(self.settings.voice)
+        self._set_provider(self.settings.tts_provider)
         self.azure_key_edit.setText(self.settings.azure_key)
         self.azure_region_edit.setText(self.settings.azure_region)
+        self.polly_config_path_edit.setText(self.settings.polly_config_path)
+        self.polly_engine_combo.setCurrentText(self.settings.polly_engine)
         self.rate_combo.setCurrentText(self.settings.speaking_rate)
         self.synthesis_volume_combo.setCurrentText(self.settings.synthesis_volume)
         self.emphasis_combo.setCurrentText(self.settings.emphasis_level)
@@ -174,10 +207,21 @@ class SettingsEditor(QWidget):
         self.advanced_group.setChecked(show_advanced)
         self._toggle_advanced_controls(show_advanced)
         self._update_playback_label(self.settings.playback_volume)
+        self._refresh_voice_options(preferred_voice=self.settings.voice)
+        self._refresh_provider_controls()
 
     def set_settings(self, settings):
         self.settings = AppSettings(**settings.__dict__)
         self._load_settings()
+
+    def _set_provider(self, provider_name):
+        provider_index = self.provider_combo.findData(provider_name)
+        if provider_index == -1:
+            provider_index = 0
+        self.provider_combo.setCurrentIndex(provider_index)
+
+    def _current_provider_name(self):
+        return self.provider_combo.currentData() or "azure"
 
     def _update_playback_label(self, value):
         self.playback_volume_label.setText(f"{value}%")
@@ -190,6 +234,16 @@ class SettingsEditor(QWidget):
         )
         if chosen_dir:
             self.output_dir_edit.setText(chosen_dir)
+
+    def _choose_polly_config_file(self):
+        chosen_file, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose Amazon Polly Config File",
+            str(Path.cwd()),
+            "INI Files (*.ini *.env *.cfg);;All Files (*.*)",
+        )
+        if chosen_file:
+            self.polly_config_path_edit.setText(chosen_file)
 
     def get_settings(self):
         """
@@ -204,9 +258,24 @@ class SettingsEditor(QWidget):
             )
             return None
 
-        self.settings.voice = self.voice_combo.currentText()
+        if self._current_provider_name() == "polly":
+            polly_config_path = self.polly_config_path_edit.text().strip()
+            if not polly_config_path:
+                QMessageBox.warning(
+                    self,
+                    "Missing Polly Config",
+                    "Choose the dedicated Amazon Polly config file before applying settings.",
+                )
+                return None
+
+        self.settings.tts_provider = self._current_provider_name()
+        self.settings.voice = self.voice_combo.currentText().strip()
         self.settings.azure_key = self.azure_key_edit.text().strip()
         self.settings.azure_region = self.azure_region_edit.text().strip()
+        self.settings.polly_config_path = (
+            self.polly_config_path_edit.text().strip() or ".polly.env"
+        )
+        self.settings.polly_engine = self.polly_engine_combo.currentText()
         self.settings.speaking_rate = self.rate_combo.currentText()
         self.settings.synthesis_volume = (
             self.synthesis_volume_combo.currentText()
@@ -222,36 +291,110 @@ class SettingsEditor(QWidget):
         self.settings.logging_enabled = self.logging_checkbox.isChecked()
         return self.settings
 
-    def _test_connection(self):
-        azure_key = self.azure_key_edit.text().strip()
-        azure_region = self.azure_region_edit.text().strip()
-        if not azure_key or not azure_region:
-            QMessageBox.warning(
-                self,
-                "Missing Azure Settings",
-                "Enter both the Azure key and region before testing the connection.",
+    def _handle_provider_changed(self):
+        self._refresh_provider_controls()
+        current_voice = self.voice_combo.currentText().strip()
+        suggestions = set(get_voice_suggestions(self._current_provider_name()))
+        preferred_voice = current_voice if current_voice in suggestions else ""
+        self._refresh_voice_options(preferred_voice=preferred_voice)
+        self.connection_status_label.setText("Not tested")
+
+    def _refresh_provider_controls(self):
+        using_azure = self._current_provider_name() == "azure"
+        using_polly = self._current_provider_name() == "polly"
+
+        self.azure_key_edit.setEnabled(using_azure)
+        self.azure_region_edit.setEnabled(using_azure)
+        self.polly_config_path_edit.setEnabled(using_polly)
+        self.polly_config_browse_button.setEnabled(using_polly)
+        self.polly_engine_combo.setEnabled(using_polly)
+        self.test_connection_button.setText(
+            f"Test {get_provider_display_name(self._current_provider_name())}"
+        )
+
+    def _refresh_voice_options(self, preferred_voice=""):
+        suggestions = list(get_voice_suggestions(self._current_provider_name()))
+        current_voice = preferred_voice.strip()
+        self.voice_combo.blockSignals(True)
+        self.voice_combo.clear()
+        self.voice_combo.addItems(suggestions)
+        if current_voice and current_voice not in suggestions:
+            self.voice_combo.addItem(current_voice)
+        if current_voice:
+            self.voice_combo.setCurrentText(current_voice)
+        elif suggestions:
+            self.voice_combo.setCurrentText(suggestions[0])
+        self.voice_combo.blockSignals(False)
+
+    def _build_provider_config(self):
+        provider_name = self._current_provider_name()
+        if provider_name == "azure":
+            azure_key = self.azure_key_edit.text().strip()
+            azure_region = self.azure_region_edit.text().strip()
+            if not azure_key or not azure_region:
+                raise ValueError(
+                    "Enter both the Azure key and region before testing the connection."
+                )
+            return TTSProviderConfig(
+                provider_name="azure",
+                credentials={
+                    "subscription_key": azure_key,
+                    "region": azure_region,
+                },
             )
-            self.connection_status_label.setText("Missing credentials")
-            return
+
+        polly_config_path = self.polly_config_path_edit.text().strip()
+        if not polly_config_path:
+            raise ValueError(
+                "Choose the dedicated Amazon Polly config file before testing the connection."
+            )
+
+        from app.model.api.polly_config import get_polly_settings
+
+        return TTSProviderConfig(
+            provider_name="polly",
+            credentials=get_polly_settings(polly_config_path),
+            api_config_path=polly_config_path,
+            options={"engine": self.polly_engine_combo.currentText()},
+        )
+
+    def _test_connection(self):
+        provider_name = self._current_provider_name()
+        provider_display_name = get_provider_display_name(provider_name)
 
         try:
-            provider = create_tts_provider(
-                TTSProviderConfig(
-                    provider_name="azure",
-                    credentials={
-                        "subscription_key": azure_key,
-                        "region": azure_region,
+            provider_config = self._build_provider_config()
+            provider = create_tts_provider(provider_config)
+            if provider_name == "polly":
+                voices = provider.list_voices(
+                    engine=self.polly_engine_combo.currentText()
+                )
+                if voices:
+                    self._refresh_voice_options(
+                        preferred_voice=self.voice_combo.currentText()
+                    )
+                    current_voice = self.voice_combo.currentText().strip()
+                    self.voice_combo.clear()
+                    self.voice_combo.addItems(list(voices))
+                    if current_voice and current_voice not in voices:
+                        self.voice_combo.addItem(current_voice)
+                    self.voice_combo.setCurrentText(current_voice or voices[0])
+
+            voice_name = self.voice_combo.currentText().strip()
+            audio_data = provider.synthesize(
+                TTSRequest(
+                    text="Connection test.",
+                    voice=voice_name or None,
+                    metadata={
+                        "engine": self.polly_engine_combo.currentText(),
                     },
                 )
-            )
-            audio_data = provider.synthesize(
-                TTSRequest(text="Connection test.")
             ).audio_data
         except Exception as error:
             QMessageBox.critical(
                 self,
                 "Connection Failed",
-                f"Unable to validate the Azure Speech configuration.\n\n{error}",
+                f"Unable to validate the {provider_display_name} configuration.\n\n{error}",
             )
             self.connection_status_label.setText("Connection failed")
             return
@@ -261,7 +404,7 @@ class SettingsEditor(QWidget):
             QMessageBox.information(
                 self,
                 "Connection Successful",
-                "Azure Speech credentials are valid.",
+                f"{provider_display_name} settings are valid.",
             )
         else:
             self.connection_status_label.setText("No audio returned")

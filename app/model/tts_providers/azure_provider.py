@@ -1,6 +1,7 @@
 """Azure-backed implementation of the generic text-to-speech provider API."""
 
 from app.model.api.azure_tts_api import AzureTTSAPI
+from app.model.ssml.ssml_config import SSMLConfig
 from app.model.tts_providers.models import (
     TTSProviderCapabilities,
     TTSRequest,
@@ -39,3 +40,8 @@ class AzureTTSProvider:
             supported_formats=("audio-16khz-32kbitrate-mono-mp3",),
             max_input_size=None,
         )
+
+    def list_voices(self, engine=None, language_code=None) -> tuple[str, ...]:
+        del engine
+        del language_code
+        return tuple(SSMLConfig.SUPPORTED_VOICES)

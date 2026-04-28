@@ -58,3 +58,7 @@ credentials are missing:
   connection test.
 - Azure credentials are required for preview generation, exported files, and
   batch document audio export.
+
+See also:
+
+- [Amazon Polly configuration](polly_config.md)

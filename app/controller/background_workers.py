@@ -162,7 +162,11 @@ class BatchExportWorker(QObject):
 
                 resolved_text = (row.get("resolved_text") or "").strip()
                 ssml = build_ssml_document(resolved_text, self.settings, cleaner)
-                audio_data = processor.text_to_speech(ssml, use_ssml=True)
+                audio_data = processor.text_to_speech(
+                    ssml,
+                    use_ssml=True,
+                    voice=self.settings.voice,
+                )
 
                 if self._cancel_requested:
                     self.cancelled.emit(exported_files)

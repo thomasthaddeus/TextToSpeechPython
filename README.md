@@ -2,7 +2,7 @@
 
 ## Overview
 
-`TextToSpeechPython` is a PyQt6 desktop application for building Azure Speech
+`TextToSpeechPython` is a PyQt6 desktop application for building provider-backed
 text-to-speech workflows around plain text, SSML previewing, and multi-format
 document imports.
 
@@ -10,8 +10,9 @@ The current application supports:
 
 - editing or pasting source text in the main window
 - live SSML preview generation
-- Azure Speech synthesis to preview or exported `.mp3` files
-- a collapsible settings sidebar for Azure credentials, voice, output directory, logging,
+- Azure Speech and Amazon Polly synthesis to preview or exported `.mp3` files
+- a collapsible settings sidebar for provider selection, Azure credentials,
+  Amazon Polly config, voice, output directory, logging,
   playback volume, and advanced SSML controls
 - document import for `.txt`, `.docx`, `.pdf`, `.html`, `.htm`, `.rtf`,
   `.epub`, `.xlsx`, `.xls`, `.csv`, `.pptx`, and common image formats
@@ -28,7 +29,8 @@ The current application supports:
 
 - Python 3.11+
 - Poetry
-- Azure Speech resource with a valid key and region
+- Azure Speech resource with a valid key and region, or Amazon Polly AWS
+  credentials in a dedicated Polly config file
 - Tesseract OCR for scanned PDFs and image imports
 
 ## Installation
@@ -77,10 +79,10 @@ or:
 poetry run tts-app
 ```
 
-## Azure Configuration
+## Provider Configuration
 
-The app can start without Azure configured, but generation and export will stay
-unavailable until credentials are provided.
+The app can start without a configured TTS provider, but generation and export
+stay unavailable until provider credentials are available.
 
 You can configure Azure Speech in either of these ways:
 
@@ -97,11 +99,25 @@ region = YOUR_AZURE_REGION
 
 GUI settings take precedence over `.env` when both are present.
 
+Amazon Polly uses its own dedicated config file instead of Azure's `.env`
+fallback. Example `.polly.env`:
+
+```ini
+[POLLY]
+aws_access_key_id = YOUR_AWS_ACCESS_KEY_ID
+aws_secret_access_key = YOUR_AWS_SECRET_ACCESS_KEY
+aws_session_token = OPTIONAL_SESSION_TOKEN
+region = us-east-1
+```
+
+Set `TTS Provider` to `Amazon Polly` in the settings sidebar, point the app at
+that config file, and choose the desired Polly engine.
+
 ## Main Workflow
 
 1. Paste text into the editor, open a local document, open a URL, import raw
    HTML, or use `Import Document` for row-based selection.
-2. Open `Tools > Settings` to expand the settings sidebar and configure Azure, voice, output directory, and SSML options.
+2. Open `Tools > Settings` to expand the settings sidebar and configure the TTS provider, provider credentials/config path, voice, output directory, and SSML options.
 3. Review the generated SSML preview.
 4. Use `Generate & Play` for a temporary preview file or `Generate File` to export an `.mp3`.
 5. Review, replay, copy, reopen, or restore previous work from the `Recent Audio` panel.
@@ -211,7 +227,7 @@ The app writes runtime artifacts under `data/dynamic/`, including:
 - [app/main.py](app/main.py): application entrypoint
 - [app/gui](app/gui): in-repo Qt UI modules and dialogs
 - [app/controller](app/controller): GUI orchestration and workflow logic
-- [app/model](app/model): settings, Azure wrappers, SSML helpers, and scrapers
+- [app/model](app/model): settings, provider wrappers, SSML helpers, and scrapers
 - [docs](docs): supporting documentation
 - [tests](tests): focused regression tests
 

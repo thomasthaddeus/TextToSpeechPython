@@ -3,6 +3,7 @@ from app.controller.main_controller import MainController
 from app.model.app_settings import AppSettings
 from app.model.processors.tts_processor import TTSProcessor
 from app.model.tts_providers.azure_provider import AzureTTSProvider
+from app.model.tts_providers.polly_provider import PollyTTSProvider
 from app.model.tts_providers.models import (
     TTSProviderCapabilities,
     TTSProviderConfig,
@@ -33,6 +34,11 @@ class FakeProvider:
             max_input_size=4096,
         )
 
+    def list_voices(self, engine=None, language_code=None):
+        del engine
+        del language_code
+        return ("fake-voice",)
+
 
 def test_tts_processor_supports_fake_provider_synthesis():
     provider = FakeProvider()
@@ -48,6 +54,7 @@ def test_tts_processor_supports_fake_provider_synthesis():
     assert capabilities.supports_offline
     assert capabilities.supported_formats == ("wav", "mp3")
     assert capabilities.max_input_size == 4096
+    assert processor.list_voices() == ("fake-voice",)
 
 
 def test_azure_provider_wraps_azure_api(monkeypatch):
@@ -83,6 +90,95 @@ def test_azure_provider_wraps_azure_api(monkeypatch):
     assert capabilities.supports_ssml
     assert capabilities.supports_style_prompt
     assert capabilities.supported_formats == ("audio-16khz-32kbitrate-mono-mp3",)
+    assert "en-US-GuyNeural" in provider.list_voices()
+
+
+def test_polly_provider_wraps_polly_client_and_maps_request():
+    captured = {}
+
+    class FakeAudioStream:
+        def read(self):
+            return b"polly-audio"
+
+    class FakePollyClient:
+        def synthesize_speech(self, **kwargs):
+            captured["request"] = kwargs
+            return {
+                "AudioStream": FakeAudioStream(),
+                "RequestCharacters": len(kwargs["Text"]),
+                "ContentType": "audio/mpeg",
+            }
+
+        def describe_voices(self, **kwargs):
+            captured.setdefault("describe", []).append(kwargs)
+            return {
+                "Voices": [{"Id": "Joanna"}, {"Id": "Matthew"}],
+            }
+
+    provider = PollyTTSProvider(
+        aws_access_key_id="aws-key",
+        aws_secret_access_key="aws-secret",
+        region="us-east-1",
+        engine="neural",
+        client=FakePollyClient(),
+    )
+    result = provider.synthesize(
+        TTSRequest(
+            text="<speak>Hello</speak>",
+            use_ssml=True,
+            voice="Joanna",
+            metadata={"engine": "neural"},
+        )
+    )
+    capabilities = provider.get_capabilities()
+    voices = provider.list_voices(engine="neural")
+
+    assert result.audio_data == b"polly-audio"
+    assert captured["request"]["VoiceId"] == "Joanna"
+    assert captured["request"]["Engine"] == "neural"
+    assert captured["request"]["TextType"] == "ssml"
+    assert captured["request"]["OutputFormat"] == "mp3"
+    assert captured["request"]["SampleRate"] == "24000"
+    assert capabilities.supports_ssml
+    assert not capabilities.supports_style_prompt
+    assert capabilities.max_input_size == 6000
+    assert "mp3" in capabilities.supported_formats
+    assert voices == ("Joanna", "Matthew")
+
+
+def test_polly_provider_returns_clear_ssml_errors():
+    class InvalidSsmlError(Exception):
+        response = {
+            "Error": {
+                "Code": "InvalidSsmlException",
+                "Message": "SSML is invalid.",
+            }
+        }
+
+    class BrokenPollyClient:
+        def synthesize_speech(self, **kwargs):
+            del kwargs
+            raise InvalidSsmlError()
+
+    provider = PollyTTSProvider(
+        aws_access_key_id="aws-key",
+        aws_secret_access_key="aws-secret",
+        region="us-east-1",
+        client=BrokenPollyClient(),
+    )
+
+    try:
+        provider.synthesize(
+            TTSRequest(
+                text="<speak>Broken</speak>",
+                use_ssml=True,
+                voice="Joanna",
+            )
+        )
+    except RuntimeError as error:
+        assert "Amazon Polly rejected the SSML document" in str(error)
+    else:  # pragma: no cover - defensive test guard
+        raise AssertionError("Expected RuntimeError for invalid Polly SSML.")
 
 
 def test_main_controller_builds_tts_processor_from_provider_config(monkeypatch):
@@ -133,8 +229,8 @@ def test_batch_export_worker_uses_provider_config_for_synthesis(
     ]
 
     class FakeProcessor:
-        def text_to_speech(self, text, use_ssml=False):
-            captured["synthesis"] = (text, use_ssml)
+        def text_to_speech(self, text, use_ssml=False, voice=None, metadata=None):
+            captured["synthesis"] = (text, use_ssml, voice, metadata)
             return b"worker-audio"
 
     def fake_create_tts_processor(provider_config):
@@ -165,3 +261,4 @@ def test_batch_export_worker_uses_provider_config_for_synthesis(
     assert captured["provider_config"].credentials["subscription_key"] == "worker-key"
     assert captured["provider_config"].credentials["region"] == "worker-region"
     assert captured["synthesis"][1] is True
+    assert captured["synthesis"][2] == "en-US-GuyNeural"

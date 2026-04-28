@@ -12,6 +12,7 @@ from app.model.tts_providers.models import (
     TTSRequest,
     TTSResult,
 )
+from app.model.tts_providers.voice_catalog import get_voice_suggestions
 
 __all__ = [
     "TTSProvider",
@@ -21,5 +22,6 @@ __all__ = [
     "TTSResult",
     "create_tts_provider",
     "get_provider_display_name",
+    "get_voice_suggestions",
     "resolve_tts_provider_config",
 ]
