@@ -61,6 +61,21 @@ def test_build_ssml_includes_advanced_controls(controller_factory):
     assert '<break time="500ms"/>Speak now' in ssml
 
 
+def test_build_ssml_honors_section_level_narration_markup(controller_factory):
+    controller = controller_factory()
+
+    ssml = controller._build_ssml(
+        'Intro\n\n[[narration speaker="Avery" voice="en-US-JennyNeural" '
+        'rate="slow" pause="500ms"]]Quoted & careful text[[/narration]]'
+    )
+
+    assert 'voice name="en-US-GuyNeural"' in ssml
+    assert 'voice name="en-US-JennyNeural"' in ssml
+    assert 'rate="slow"' in ssml
+    assert '<break time="500ms"/>' in ssml
+    assert "Quoted &amp; careful text" in ssml
+
+
 class ToggleStub:
     def __init__(self):
         self.enabled = True
@@ -178,6 +193,24 @@ def test_refresh_action_states_relabels_preview_when_multimedia_unavailable():
     assert not controller.view.stopButton.enabled
     assert not controller.view.playbackVolumeSlider.enabled
     assert "playback controls are disabled" in controller.view.actionHintLabel.text
+
+
+def test_refresh_action_states_disables_ssml_preview_for_plain_text_provider():
+    controller = MainController.__new__(MainController)
+    controller.settings = AppSettings(
+        tts_provider="gemini",
+        gemini_model="gemini-2.5-flash-tts",
+    )
+    controller.view = ActionStateViewStub("Hello world")
+    controller.media_player = object()
+    controller.audio_output = object()
+    controller.preview_audio_path = None
+
+    controller._refresh_action_states()
+
+    assert not controller.view.previewButton.enabled
+    assert controller.view.previewButton.text == "Preview Unavailable"
+    assert "provider-controlled text synthesis" in controller.view.actionHintLabel.text
 
 
 def test_export_editor_text_exports_html_without_round_tripping_source_document(

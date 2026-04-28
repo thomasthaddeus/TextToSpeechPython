@@ -8,6 +8,11 @@ from loguru import logger
 
 from app.model.app_settings import AppSettings
 from app.model.scraper.document_scraper import DocumentScraper
+from app.model.ssml.narration_markup import (
+    build_narration_ssml,
+    has_narration_markup,
+    render_plain_narration_text,
+)
 from app.model.ssml.text_to_ssml import TextToSSML
 from app.model.tts_providers import get_provider_display_name
 from app.utils.text_cleaner import TextCleaner
@@ -32,6 +37,9 @@ def sanitize_batch_name(value):
 
 def build_ssml_document(text, settings, cleaner=None):
     """Build the SSML document used by both UI and worker-thread generation."""
+    if has_narration_markup(text):
+        return build_narration_ssml(text, settings, cleaner)
+
     working_text = text
     text_cleaner = cleaner or TextCleaner()
     if settings.auto_clean_text:
@@ -69,10 +77,11 @@ def build_provider_input(text, settings, provider_capabilities, cleaner=None):
     if provider_capabilities.supports_ssml:
         return build_ssml_document(text, settings, cleaner), True
 
-    working_text = text
     text_cleaner = cleaner or TextCleaner()
-    if settings.auto_clean_text:
-        working_text = text_cleaner.clean_all(working_text)
+    working_text = render_plain_narration_text(
+        text,
+        text_cleaner if settings.auto_clean_text else None,
+    )
     return working_text, False
 
 

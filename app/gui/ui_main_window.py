@@ -3,8 +3,10 @@
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
     QGroupBox,
+    QComboBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QSlider,
     QListWidget,
     QMainWindow,
@@ -21,6 +23,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from app.gui.settings_dialog import SettingsEditor
 from app.model.app_settings import AppSettings
+from app.model.ssml.ssml_config import SSMLConfig
 
 
 class Ui_MainWindow:
@@ -78,6 +81,40 @@ class Ui_MainWindow:
         action_row.addWidget(self.playbackVolumeValueLabel)
 
         root_layout.addWidget(self.audioControlsGroup)
+
+        self.narrationControlsGroup = QGroupBox("Narration Section", central_widget)
+        narration_row = QHBoxLayout(self.narrationControlsGroup)
+        self.narrationSpeakerEdit = QLineEdit(self.narrationControlsGroup)
+        self.narrationSpeakerEdit.setPlaceholderText("Speaker")
+        self.narrationVoiceCombo = QComboBox(self.narrationControlsGroup)
+        self.narrationVoiceCombo.setEditable(True)
+        self.narrationVoiceCombo.addItems(SSMLConfig().list_voices())
+        self.narrationRateCombo = QComboBox(self.narrationControlsGroup)
+        self.narrationRateCombo.addItems(
+            ["default", "x-slow", "slow", "medium", "fast", "x-fast"]
+        )
+        self.narrationVolumeCombo = QComboBox(self.narrationControlsGroup)
+        self.narrationVolumeCombo.addItems(
+            ["default", "silent", "x-soft", "soft", "medium", "loud", "x-loud"]
+        )
+        self.narrationPauseCombo = QComboBox(self.narrationControlsGroup)
+        self.narrationPauseCombo.addItems(["none", "250ms", "500ms", "1s", "2s"])
+        self.applyNarrationButton = QPushButton(
+            "Apply To Selection",
+            self.narrationControlsGroup,
+        )
+        for label_text, widget in (
+            ("Speaker", self.narrationSpeakerEdit),
+            ("Voice", self.narrationVoiceCombo),
+            ("Rate", self.narrationRateCombo),
+            ("Volume", self.narrationVolumeCombo),
+            ("Pause", self.narrationPauseCombo),
+        ):
+            narration_row.addWidget(QLabel(label_text, self.narrationControlsGroup))
+            narration_row.addWidget(widget)
+        narration_row.addStretch(1)
+        narration_row.addWidget(self.applyNarrationButton)
+        root_layout.addWidget(self.narrationControlsGroup)
 
         self.actionHintLabel = QLabel(
             "Type or import text to enable preview and generation actions.",

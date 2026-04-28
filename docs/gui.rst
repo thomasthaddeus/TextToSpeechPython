@@ -16,6 +16,8 @@ The main window includes:
 - a right-aligned status bar output summary for voice, rate, speech volume, and
   output path
 - a collapsible settings sidebar that can stay open while editing
+- a Narration Section control strip for applying speaker, voice, rate, volume,
+  and pause overrides to selected editor text
 - a File menu action for exporting the current editor text to text, Markdown,
   or generated HTML
 - a playback volume control
@@ -64,6 +66,24 @@ It also includes an advanced SSML section with:
 
 The sidebar can be expanded from the Settings action, applied without leaving
 the editor, and collapsed when the user needs more horizontal workspace.
+
+Narration Section Controls
+--------------------------
+
+The main window includes section-level narration controls for selected editor
+text. Users can assign:
+
+- speaker label
+- section voice
+- section rate
+- section volume
+- section pause
+
+Applying the controls wraps the selection in ``[[narration ...]]`` markup. The
+SSML preview and audio generation path translate that markup into per-section
+``voice``, ``prosody``, and ``break`` tags for SSML-capable providers.
+Providers that do not expose SSML strip the markup and retain useful speaker
+labels in plain text.
 
 Document Import Dialog
 ----------------------

@@ -14,6 +14,8 @@ The current application supports:
 - a collapsible settings sidebar for provider selection, Azure credentials,
   Gemini config, local TTS config, Amazon Polly config, voice, output directory, logging,
   playback volume, and advanced SSML controls
+- section-level narration controls for applying speaker, voice, rate, volume,
+  and pause changes to selected editor text
 - document import for `.txt`, `.docx`, `.pdf`, `.html`, `.htm`, `.rtf`,
   `.epub`, `.xlsx`, `.xls`, `.csv`, `.pptx`, and common image formats
 - OCR extraction for scanned PDFs and image documents when Tesseract OCR is
@@ -170,6 +172,24 @@ GUI exposes:
 - pause position
 
 These controls are applied to both the SSML preview and generated audio.
+
+## Section Narration Controls
+
+The main window includes a `Narration Section` control strip for more expressive
+audio. Select text in the editor, choose a speaker label, voice, rate, volume,
+and pause, then use `Apply To Selection`.
+
+The app wraps the selected text in lightweight narration markup:
+
+```text
+[[narration speaker="Avery" voice="en-US-JennyNeural" rate="slow" volume="soft" pause="500ms"]]
+Selected narration text.
+[[/narration]]
+```
+
+SSML-capable providers use that markup to generate per-section voice, cadence,
+volume, and pause changes. Plain-text providers strip the markup and keep useful
+speaker labels in the generated prompt text.
 
 ## Document Import Workflow
 

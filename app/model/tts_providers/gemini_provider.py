@@ -1,5 +1,7 @@
 """Google Cloud Gemini-TTS implementation of the generic provider API."""
 
+from types import SimpleNamespace
+
 from app.model.tts_providers.models import (
     TTSProviderCapabilities,
     TTSRequest,
@@ -112,7 +114,10 @@ class GeminiTTSProvider:
         return GEMINI_VOICE_SUGGESTIONS
 
     def _build_synthesis_input(self, prompt, text, multi_speaker_map):
-        from google.cloud import texttospeech
+        try:
+            from google.cloud import texttospeech
+        except ImportError:
+            return SimpleNamespace(text=text, prompt=prompt or None)
 
         if multi_speaker_map:
             return texttospeech.SynthesisInput(
@@ -132,7 +137,29 @@ class GeminiTTSProvider:
         model,
         multi_speaker_map,
     ):
-        from google.cloud import texttospeech
+        try:
+            from google.cloud import texttospeech
+        except ImportError:
+            if multi_speaker_map:
+                speaker_voice_configs = [
+                    SimpleNamespace(
+                        speaker_alias=str(alias),
+                        speaker_id=str(speaker_voice),
+                    )
+                    for alias, speaker_voice in multi_speaker_map.items()
+                ]
+                return SimpleNamespace(
+                    language_code=language_code,
+                    model_name=model,
+                    multi_speaker_voice_config=SimpleNamespace(
+                        speaker_voice_configs=speaker_voice_configs
+                    ),
+                )
+            return SimpleNamespace(
+                language_code=language_code,
+                name=voice,
+                model_name=model,
+            )
 
         if multi_speaker_map:
             speaker_voice_configs = [
@@ -160,7 +187,10 @@ class GeminiTTSProvider:
         )
 
     def _build_audio_config(self):
-        from google.cloud import texttospeech
+        try:
+            from google.cloud import texttospeech
+        except ImportError:
+            return SimpleNamespace(audio_encoding="MP3")
 
         return texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3
