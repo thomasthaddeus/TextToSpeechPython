@@ -1,22 +1,32 @@
 from pathlib import Path
 
-from app.controller.background_workers import BatchExportWorker, DocumentParseWorker
+from app.controller.background_workers import (
+    BatchExportWorker,
+    DocumentParseWorker,
+    build_provider_input,
+)
 from app.model.app_settings import AppSettings
-from app.model.tts_providers.models import TTSProviderCapabilities
-from app.model.tts_providers.models import TTSProviderConfig
+from app.model.tts_providers import TTSProviderCapabilities, TTSProviderConfig
 
 
 class FakeTTSProcessor:
     def __init__(self, provider_config):
         self.provider_config = provider_config
 
-    def text_to_speech(self, text, use_ssml=False, voice=None, metadata=None):
-        del voice
-        del metadata
-        return f"audio:{use_ssml}:{text}".encode("utf-8")
-
     def get_capabilities(self):
         return TTSProviderCapabilities(supports_ssml=True)
+
+    def text_to_speech(self, text, use_ssml=False, voice=None, metadata=None):
+        payload = "|".join(
+            (
+                self.provider_config.provider_name,
+                str(use_ssml),
+                voice or "",
+                str(metadata or {}),
+                text,
+            )
+        )
+        return payload.encode("utf-8")
 
 
 def fake_tts_processor(provider_config):
@@ -58,6 +68,31 @@ def test_document_parse_worker_can_parse_raw_html_sources():
     assert "Unique worker HTML body." in finished[0][0]["primary_text"]
 
 
+def test_build_provider_input_uses_plain_text_for_non_ssml_provider():
+    text, use_ssml = build_provider_input(
+        "Keep this plain text.",
+        AppSettings(tts_provider="gemini", auto_clean_text=False),
+        TTSProviderCapabilities(supports_ssml=False),
+    )
+
+    assert text == "Keep this plain text."
+    assert not use_ssml
+
+
+def test_build_provider_input_strips_narration_markup_for_plain_text_provider():
+    text, use_ssml = build_provider_input(
+        'Intro [[narration speaker="Avery" voice="en-US-JennyNeural" '
+        'rate="slow"]]dialogue text[[/narration]]',
+        AppSettings(tts_provider="gemini", auto_clean_text=False),
+        TTSProviderCapabilities(supports_ssml=False),
+    )
+
+    assert "Intro" in text
+    assert "Avery: dialogue text" in text
+    assert "[[narration" not in text
+    assert not use_ssml
+
+
 def test_batch_export_worker_writes_files_and_reports_progress(
     runtime_tmp_path, monkeypatch
 ):
@@ -82,10 +117,7 @@ def test_batch_export_worker_writes_files_and_reports_progress(
         settings=AppSettings(auto_clean_text=False),
         provider_config=TTSProviderConfig(
             provider_name="azure",
-            credentials={
-                "subscription_key": "fake-key",
-                "region": "fake-region",
-            },
+            credentials={"subscription_key": "fake-key", "region": "fake-region"},
         ),
     )
     worker.finished.connect(finished.append)
@@ -135,10 +167,7 @@ def test_batch_export_worker_can_cancel_between_rows(runtime_tmp_path, monkeypat
         settings=AppSettings(auto_clean_text=False),
         provider_config=TTSProviderConfig(
             provider_name="azure",
-            credentials={
-                "subscription_key": "fake-key",
-                "region": "fake-region",
-            },
+            credentials={"subscription_key": "fake-key", "region": "fake-region"},
         ),
     )
     worker.finished.connect(finished.append)

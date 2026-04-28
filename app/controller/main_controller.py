@@ -39,6 +39,7 @@ from app.model.scraper.document_scraper import DocumentScraper
 from app.model.ssml.ssml_config import SSMLConfig
 from app.model.tts_providers import (
     get_provider_display_name,
+    get_provider_profile,
     resolve_tts_provider_config,
 )
 from app.utils.logging_config import configure_logging
@@ -121,6 +122,9 @@ class MainController(QObject):
         self.view.generateButton.clicked.connect(self.export_audio_file)
         self.view.stopButton.clicked.connect(self.stop_audio)
         self.view.cancelTaskButton.clicked.connect(self.cancel_background_work)
+        self.view.applyNarrationButton.clicked.connect(
+            self.apply_narration_to_selection
+        )
         self.view.playbackVolumeSlider.valueChanged.connect(
             self.update_playback_volume
         )
@@ -196,8 +200,51 @@ class MainController(QObject):
     def _set_inline_hint(self, text):
         self.view.actionHintLabel.setText(text)
 
+    def apply_narration_to_selection(self):
+        cursor = self.view.textEdit.textCursor()
+        selected_text = cursor.selectedText().replace("\u2029", "\n")
+        if not selected_text.strip():
+            selected_text = "Narration text"
+
+        attributes = []
+        speaker = self.view.narrationSpeakerEdit.text().strip()
+        voice = self.view.narrationVoiceCombo.currentText().strip()
+        rate = self.view.narrationRateCombo.currentText().strip()
+        volume = self.view.narrationVolumeCombo.currentText().strip()
+        pause = self.view.narrationPauseCombo.currentText().strip()
+
+        if speaker:
+            attributes.append(f'speaker="{self._narration_attribute_value(speaker)}"')
+        if voice:
+            attributes.append(f'voice="{self._narration_attribute_value(voice)}"')
+        if rate and rate != "default":
+            attributes.append(f'rate="{self._narration_attribute_value(rate)}"')
+        if volume and volume != "default":
+            attributes.append(
+                f'volume="{self._narration_attribute_value(volume)}"'
+            )
+        if pause and pause != "none":
+            attributes.append(f'pause="{self._narration_attribute_value(pause)}"')
+
+        attribute_text = f" {' '.join(attributes)}" if attributes else ""
+        cursor.insertText(
+            f"[[narration{attribute_text}]]{selected_text}[[/narration]]"
+        )
+        self.view.textEdit.setTextCursor(cursor)
+        self.update_ssml_preview()
+        self.view.statusbar.showMessage(
+            "Applied narration settings to the selected text."
+        )
+        logger.info("Applied narration markup to selected editor text.")
+
+    def _narration_attribute_value(self, value):
+        return str(value).replace('"', "'").strip()
+
     def _refresh_action_states(self):
         has_text = bool(self._current_editor_text())
+        provider_profile = get_provider_profile(
+            getattr(self.settings, "tts_provider", "azure")
+        )
         multimedia_available = (
             self.media_player is not None and self.audio_output is not None
         )
@@ -209,7 +256,9 @@ class MainController(QObject):
             self.__dict__.get("document_parse_thread") is not None
         )
 
-        self.view.previewButton.setEnabled(has_text)
+        self.view.previewButton.setEnabled(
+            has_text and provider_profile.supports_ssml
+        )
         self.view.cleanTextButton.setEnabled(has_text)
         self.view.playButton.setEnabled(has_text)
         self.view.generateButton.setEnabled(has_text)
@@ -217,6 +266,17 @@ class MainController(QObject):
         self.view.stopButton.setEnabled(multimedia_available and has_preview_audio)
         self.view.playbackVolumeSlider.setEnabled(multimedia_available)
         self.view.cancelTaskButton.setEnabled(background_work_active)
+
+        if provider_profile.supports_ssml:
+            self.view.previewButton.setText("Preview SSML")
+            self.view.previewButton.setToolTip(
+                "Render the provider-ready SSML document used for synthesis."
+            )
+        else:
+            self.view.previewButton.setText("Preview Unavailable")
+            self.view.previewButton.setToolTip(
+                f"{self._provider_display_name()} does not expose an SSML preview."
+            )
 
         if multimedia_available:
             self.view.playButton.setText("Generate && Play")
@@ -248,6 +308,22 @@ class MainController(QObject):
             self._set_inline_hint(
                 "Type or import text to enable preview and generation actions."
             )
+            return
+
+        if not provider_profile.supports_ssml:
+            provider_name = self._provider_display_name()
+            if not multimedia_available:
+                self._set_inline_hint(
+                    f"{provider_name} uses provider-controlled text synthesis instead of SSML. Preview is unavailable, and playback controls are disabled because multimedia support is unavailable."
+                )
+            elif has_preview_audio:
+                self._set_inline_hint(
+                    f"Preview audio is ready. {provider_name} uses provider-controlled text synthesis instead of SSML."
+                )
+            else:
+                self._set_inline_hint(
+                    f"{provider_name} uses provider-controlled text synthesis instead of SSML. Generate audio to test the current provider settings."
+                )
             return
 
         advanced_chunks = []
@@ -578,6 +654,22 @@ class MainController(QObject):
             self.view.ssmlPreview.clear()
             self._refresh_action_states()
             self.view.statusbar.showMessage("Enter text to preview SSML.")
+            return
+
+        provider_profile = get_provider_profile(
+            getattr(self.settings, "tts_provider", "azure")
+        )
+        if not provider_profile.supports_ssml:
+            self.view.ssmlPreview.setPlainText(
+                (
+                    f"{self._provider_display_name()} does not expose an SSML preview. "
+                    "This provider sends cleaned text and provider-specific metadata directly to synthesis."
+                )
+            )
+            self._refresh_action_states()
+            self.view.statusbar.showMessage(
+                f"{self._provider_display_name()} does not use the SSML preview pane."
+            )
             return
 
         self.view.ssmlPreview.setPlainText(self._build_ssml(text))

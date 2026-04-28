@@ -16,6 +16,8 @@ The main window includes:
 - a right-aligned status bar output summary for voice, rate, speech volume, and
   output path
 - a collapsible settings sidebar that can stay open while editing
+- a Narration Section control strip for applying speaker, voice, rate, volume,
+  and pause overrides to selected editor text
 - a File menu action for exporting the current editor text to text, Markdown,
   or generated HTML
 - a playback volume control
@@ -65,11 +67,30 @@ It also includes an advanced SSML section with:
 The sidebar can be expanded from the Settings action, applied without leaving
 the editor, and collapsed when the user needs more horizontal workspace.
 
+Narration Section Controls
+--------------------------
+
+The main window includes section-level narration controls for selected editor
+text. Users can assign:
+
+- speaker label
+- section voice
+- section rate
+- section volume
+- section pause
+
+Applying the controls wraps the selection in ``[[narration ...]]`` markup. The
+SSML preview and audio generation path translate that markup into per-section
+``voice``, ``prosody``, and ``break`` tags for SSML-capable providers.
+Providers that do not expose SSML strip the markup and retain useful speaker
+labels in plain text.
+
 Document Import Dialog
 ----------------------
 
 The document import dialog uses a structured table instead of a free-form text
-preview.
+preview. The table is editable so users can review and correct extracted text
+before it reaches the main editor or batch export.
 
 It provides:
 
@@ -80,6 +101,8 @@ It provides:
 - table, spreadsheet, and slide metadata that preserves source context
 - format-aware labels and content-mode options for pages, slides, chapters,
   OCR text, and spreadsheet rows
+- editable titles, main text, and context cells
+- row review actions for clean, split, merge, duplicate, delete, and restore
 - multi-row selection
 - content-mode selection
 - import of selected rows into the main editor

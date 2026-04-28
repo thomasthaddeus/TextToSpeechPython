@@ -1,4 +1,4 @@
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QItemSelectionModel, Qt
 from PyQt6.QtWidgets import QMainWindow
 
 from app.controller.main_controller import MainController
@@ -8,9 +8,9 @@ from app.gui.ui_main_window import Ui_MainWindow
 from app.model.app_settings import AppSettings
 
 
-def test_file_menu_exposes_source_and_export_actions(qtbot):
+def test_file_menu_exposes_source_and_export_actions(qt_app):
+    del qt_app
     window = QMainWindow()
-    qtbot.addWidget(window)
     ui = Ui_MainWindow()
     ui.setupUi(window)
 
@@ -30,9 +30,9 @@ def test_file_menu_exposes_source_and_export_actions(qtbot):
     ]
 
 
-def test_history_list_is_actionable_from_real_widget(qtbot):
+def test_history_list_is_actionable_from_real_widget(qt_app):
+    del qt_app
     window = QMainWindow()
-    qtbot.addWidget(window)
     ui = Ui_MainWindow()
     ui.setupUi(window)
 
@@ -44,15 +44,14 @@ def test_history_list_is_actionable_from_real_widget(qtbot):
     assert ui.historyToggleButton.text() == "-"
 
 
-def test_recent_audio_toggle_collapses_and_expands_panel(qtbot):
+def test_recent_audio_toggle_collapses_and_expands_panel(qt_app):
     window = QMainWindow()
-    qtbot.addWidget(window)
     ui = Ui_MainWindow()
     ui.setupUi(window)
     controller = MainController.__new__(MainController)
     controller.view = ui
     window.show()
-    qtbot.waitExposed(window)
+    qt_app.processEvents()
 
     controller.toggle_recent_audio()
 
@@ -71,14 +70,13 @@ def test_recent_audio_toggle_collapses_and_expands_panel(qtbot):
     assert ui.historyGroup.maximumHeight() == 170
 
 
-def test_output_summary_is_right_aligned_statusbar_text(qtbot):
+def test_output_summary_is_right_aligned_statusbar_text(qt_app):
     window = QMainWindow()
-    qtbot.addWidget(window)
     ui = Ui_MainWindow()
     ui.setupUi(window)
     window.resize(1200, 620)
     window.show()
-    qtbot.waitExposed(window)
+    qt_app.processEvents()
 
     assert ui.settingsSidebar.isHidden()
     assert ui.outputStatusLabel.parent() == ui.statusbar
@@ -87,9 +85,42 @@ def test_output_summary_is_right_aligned_statusbar_text(qtbot):
     assert ui.outputStatusLabel.width() > ui.statusbar.width() // 2
 
 
-def test_settings_sidebar_toggle_and_apply_uses_main_window_editor(qtbot):
+def test_narration_controls_wrap_selected_editor_text(qt_app):
+    del qt_app
     window = QMainWindow()
-    qtbot.addWidget(window)
+    ui = Ui_MainWindow()
+    ui.setupUi(window)
+    controller = MainController.__new__(MainController)
+    controller.view = ui
+    controller.settings = AppSettings()
+    controller.cleaner = None
+    controller.media_player = None
+    controller.audio_output = None
+    controller.preview_audio_path = None
+
+    ui.textEdit.setPlainText("First sentence. Second sentence.")
+    cursor = ui.textEdit.textCursor()
+    cursor.setPosition(16)
+    cursor.setPosition(32, cursor.MoveMode.KeepAnchor)
+    ui.textEdit.setTextCursor(cursor)
+    ui.narrationSpeakerEdit.setText("Avery")
+    ui.narrationRateCombo.setCurrentText("slow")
+    ui.narrationVolumeCombo.setCurrentText("soft")
+    ui.narrationPauseCombo.setCurrentText("500ms")
+
+    controller.apply_narration_to_selection()
+
+    editor_text = ui.textEdit.toPlainText()
+    assert 'speaker="Avery"' in editor_text
+    assert 'rate="slow"' in editor_text
+    assert 'volume="soft"' in editor_text
+    assert 'pause="500ms"' in editor_text
+    assert "[[/narration]]" in editor_text
+
+
+def test_settings_sidebar_toggle_and_apply_uses_main_window_editor(qt_app):
+    del qt_app
+    window = QMainWindow()
     ui = Ui_MainWindow()
     ui.setupUi(window)
     controller = MainController.__new__(MainController)
@@ -118,9 +149,9 @@ def test_settings_sidebar_toggle_and_apply_uses_main_window_editor(qtbot):
     assert ui.openSettingsButton.text() == "Settings"
 
 
-def test_loading_state_toggles_real_import_dialog_buttons(qtbot):
+def test_loading_state_toggles_real_import_dialog_buttons(qt_app):
+    del qt_app
     dialog = SecondApp()
-    qtbot.addWidget(dialog)
     controller = SecondController(dialog)
 
     controller._set_loading_state(True)
@@ -139,9 +170,9 @@ def test_loading_state_toggles_real_import_dialog_buttons(qtbot):
     assert not dialog.cancelLoadButton.isEnabled()
 
 
-def test_loaded_rows_populate_table_apply_profile_and_select_rows(qtbot):
+def test_loaded_rows_populate_table_apply_profile_and_select_rows(qt_app):
+    del qt_app
     dialog = SecondApp()
-    qtbot.addWidget(dialog)
     controller = SecondController(dialog)
     rows = [
         {
@@ -174,9 +205,9 @@ def test_loaded_rows_populate_table_apply_profile_and_select_rows(qtbot):
     assert "Loaded 2 document section" in dialog.infoLabel.text()
 
 
-def test_import_selected_rows_emits_text_and_accepts_dialog(qtbot):
+def test_import_selected_rows_emits_text_and_accepts_dialog(qt_app):
+    del qt_app
     dialog = SecondApp()
-    qtbot.addWidget(dialog)
     controller = SecondController(dialog)
     imported_text = []
     dialog.textImported.connect(imported_text.append)
@@ -197,3 +228,85 @@ def test_import_selected_rows_emits_text_and_accepts_dialog(qtbot):
 
     assert imported_text == ["Main narration text."]
     assert dialog.result() == dialog.DialogCode.Accepted
+
+
+def test_import_dialog_uses_edited_row_text_for_import(qt_app):
+    del qt_app
+    dialog = SecondApp()
+    controller = SecondController(dialog)
+    imported_text = []
+    dialog.textImported.connect(imported_text.append)
+    rows = [
+        {
+            "item_number": 1,
+            "title": "Editable Row",
+            "primary_text": "Original parser text.",
+            "secondary_text": "Original context.",
+            "source_type": "txt",
+            "metadata": {},
+        }
+    ]
+    controller._handle_load_finished(rows)
+    dialog.contentModeComboBox.setCurrentText("Text Block Only")
+
+    dialog.previewTable.item(0, 1).setText("Edited narration text.")
+    controller.import_text()
+
+    assert imported_text == ["Edited narration text."]
+
+
+def test_import_dialog_review_actions_modify_rows(qt_app):
+    del qt_app
+    dialog = SecondApp()
+    controller = SecondController(dialog)
+    rows = [
+        {
+            "item_number": 1,
+            "title": "Row One",
+            "primary_text": "First sentence. Second sentence.",
+            "secondary_text": "Context one.",
+            "source_type": "txt",
+            "metadata": {},
+        },
+        {
+            "item_number": 2,
+            "title": "Row Two",
+            "primary_text": "Third sentence.",
+            "secondary_text": "Context two.",
+            "source_type": "txt",
+            "metadata": {},
+        },
+    ]
+    controller._handle_load_finished(rows)
+
+    dialog.previewTable.selectRow(0)
+    controller.duplicate_selected_rows()
+    assert dialog.previewTable.rowCount() == 3
+    assert "Copy" in dialog.previewTable.item(1, 0).text()
+
+    dialog.previewTable.clearSelection()
+    dialog.previewTable.selectRow(0)
+    controller.split_selected_rows()
+    assert dialog.previewTable.rowCount() == 4
+    assert "Second sentence." in dialog.previewTable.item(1, 1).text()
+
+    dialog.previewTable.clearSelection()
+    selection_model = dialog.previewTable.selectionModel()
+    selection_model.select(
+        dialog.previewTable.model().index(0, 0),
+        QItemSelectionModel.SelectionFlag.Select
+        | QItemSelectionModel.SelectionFlag.Rows,
+    )
+    selection_model.select(
+        dialog.previewTable.model().index(1, 0),
+        QItemSelectionModel.SelectionFlag.Select
+        | QItemSelectionModel.SelectionFlag.Rows,
+    )
+    controller.merge_selected_rows()
+    assert dialog.previewTable.rowCount() == 3
+    assert "First sentence." in dialog.previewTable.item(0, 1).text()
+    assert "Second sentence." in dialog.previewTable.item(0, 1).text()
+
+    dialog.previewTable.item(0, 1).setText("Manual edit")
+    controller.restore_selected_rows()
+    assert dialog.previewTable.item(0, 1).text() == "First sentence. Second sentence."

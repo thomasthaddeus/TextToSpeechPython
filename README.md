@@ -14,6 +14,8 @@ The current application supports:
 - a collapsible settings sidebar for provider selection, Azure credentials,
   Gemini config, local TTS config, Amazon Polly config, voice, output directory, logging,
   playback volume, and advanced SSML controls
+- section-level narration controls for applying speaker, voice, rate, volume,
+  and pause changes to selected editor text
 - document import for `.txt`, `.docx`, `.pdf`, `.html`, `.htm`, `.rtf`,
   `.epub`, `.xlsx`, `.xls`, `.csv`, `.pptx`, and common image formats
 - OCR extraction for scanned PDFs and image documents when Tesseract OCR is
@@ -171,11 +173,29 @@ GUI exposes:
 
 These controls are applied to both the SSML preview and generated audio.
 
+## Section Narration Controls
+
+The main window includes a `Narration Section` control strip for more expressive
+audio. Select text in the editor, choose a speaker label, voice, rate, volume,
+and pause, then use `Apply To Selection`.
+
+The app wraps the selected text in lightweight narration markup:
+
+```text
+[[narration speaker="Avery" voice="en-US-JennyNeural" rate="slow" volume="soft" pause="500ms"]]
+Selected narration text.
+[[/narration]]
+```
+
+SSML-capable providers use that markup to generate per-section voice, cadence,
+volume, and pause changes. Plain-text providers strip the markup and keep useful
+speaker labels in the generated prompt text.
+
 ## Document Import Workflow
 
 `Import Document` opens a structured import dialog with:
 
-- a row-based preview of extracted document sections
+- an editable row-based review table of extracted document sections
 - heading-aware rows for DOCX, HTML, and EPUB content where available
 - table and spreadsheet rows that keep sheet, column, and table context
 - format-aware column labels and import modes, such as slide notes, page text,
@@ -183,6 +203,8 @@ These controls are applied to both the SSML preview and generated audio.
 - multi-row selection
 - content modes that adapt to the loaded format, such as page text, slide
   notes, chapter text, OCR text, image text, or spreadsheet row context
+- review actions for cleaning, splitting, merging, duplicating, deleting, and
+  restoring imported rows before generation
 
 Supported local source types include `.txt`, `.docx`, `.pdf`, `.html`, `.htm`,
 `.rtf`, `.epub`, `.xlsx`, `.xls`, `.csv`, `.pptx`, `.png`, `.jpg`, `.jpeg`,
@@ -190,8 +212,9 @@ Supported local source types include `.txt`, `.docx`, `.pdf`, `.html`, `.htm`,
 
 From that dialog you can:
 
-- import the selected rows into the main editor
-- batch export the selected rows to one `.mp3` per item
+- edit extracted titles, narration text, and context before using them
+- import the selected reviewed rows into the main editor
+- batch export the selected reviewed rows to one `.mp3` per item
 - cancel active document-load or batch-export work without closing the app
 
 The main window also supports quick source import from `File > Open Document`,
