@@ -199,7 +199,7 @@ class Ui_MainWindow:
 
         self.statusbar = QStatusBar(main_window)
         self.outputStatusLabel = QLabel(
-            "Voice: en-US-GuyNeural | Rate: medium | Speech Volume: medium | Output: data/dynamic/audio",
+            "Provider: Azure Speech | Voice: en-US-GuyNeural | Rate: medium | Speech Volume: medium | Output: data/dynamic/audio",
             self.statusbar,
         )
         self.outputStatusLabel.setObjectName("outputStatusLabel")
@@ -210,7 +210,7 @@ class Ui_MainWindow:
             Qt.TextInteractionFlag.TextSelectableByMouse
         )
         self.outputStatusLabel.setToolTip(
-            "Current voice, rate, speech volume, and output location."
+            "Current provider, voice, rate, speech volume, and output location."
         )
         self.statusbar.addPermanentWidget(self.outputStatusLabel, 1)
         main_window.setStatusBar(self.statusbar)

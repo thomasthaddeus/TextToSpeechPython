@@ -1,0 +1,423 @@
+from app.controller.background_workers import BatchExportWorker
+from app.controller.main_controller import MainController
+from app.model.app_settings import AppSettings
+from app.model.processors.tts_processor import TTSProcessor
+from app.model.tts_providers.azure_provider import AzureTTSProvider
+from app.model.tts_providers.gemini_provider import GeminiTTSProvider
+from app.model.tts_providers.local_provider import LocalPythonTTSProvider
+from app.model.tts_providers.polly_provider import PollyTTSProvider
+from app.model.tts_providers.models import (
+    TTSProviderCapabilities,
+    TTSProviderConfig,
+    TTSRequest,
+    TTSResult,
+)
+
+
+class FakeProvider:
+    provider_name = "fake"
+
+    def __init__(self):
+        self.requests = []
+
+    def synthesize(self, request):
+        self.requests.append(request)
+        return TTSResult(
+            audio_data=f"fake:{request.use_ssml}:{request.text}".encode("utf-8"),
+            provider_name=self.provider_name,
+            request=request,
+        )
+
+    def get_capabilities(self):
+        return TTSProviderCapabilities(
+            supports_ssml=True,
+            supports_offline=True,
+            supported_formats=("wav", "mp3"),
+            max_input_size=4096,
+        )
+
+    def list_voices(self, engine=None, language_code=None):
+        del engine
+        del language_code
+        return ("fake-voice",)
+
+
+def test_tts_processor_supports_fake_provider_synthesis():
+    provider = FakeProvider()
+    processor = TTSProcessor(provider=provider)
+
+    audio_data = processor.text_to_speech("Hello provider", use_ssml=False)
+    capabilities = processor.get_capabilities()
+
+    assert audio_data == b"fake:False:Hello provider"
+    assert provider.requests[0].text == "Hello provider"
+    assert not provider.requests[0].use_ssml
+    assert capabilities.supports_ssml
+    assert capabilities.supports_offline
+    assert capabilities.supported_formats == ("wav", "mp3")
+    assert capabilities.max_input_size == 4096
+    assert processor.list_voices() == ("fake-voice",)
+
+
+def test_azure_provider_wraps_azure_api(monkeypatch):
+    captured = {}
+
+    class FakeAzureTTSAPI:
+        def __init__(self, subscription_key, region):
+            captured["credentials"] = (subscription_key, region)
+
+        def convert_ssml_to_audio(self, text):
+            captured["ssml"] = text
+            return b"azure-ssml"
+
+        def convert_text_to_audio(self, text):
+            captured["text"] = text
+            return b"azure-text"
+
+    monkeypatch.setattr(
+        "app.model.tts_providers.azure_provider.AzureTTSAPI",
+        FakeAzureTTSAPI,
+    )
+
+    provider = AzureTTSProvider("key-123", "eastus")
+    ssml_result = provider.synthesize(TTSRequest(text="<speak>Hello</speak>", use_ssml=True))
+    text_result = provider.synthesize(TTSRequest(text="Hello", use_ssml=False))
+    capabilities = provider.get_capabilities()
+
+    assert captured["credentials"] == ("key-123", "eastus")
+    assert captured["ssml"] == "<speak>Hello</speak>"
+    assert captured["text"] == "Hello"
+    assert ssml_result.audio_data == b"azure-ssml"
+    assert text_result.audio_data == b"azure-text"
+    assert capabilities.supports_ssml
+    assert capabilities.supports_style_prompt
+    assert capabilities.supported_formats == ("audio-16khz-32kbitrate-mono-mp3",)
+    assert "en-US-GuyNeural" in provider.list_voices()
+
+
+def test_polly_provider_wraps_polly_client_and_maps_request():
+    captured = {}
+
+    class FakeAudioStream:
+        def read(self):
+            return b"polly-audio"
+
+    class FakePollyClient:
+        def synthesize_speech(self, **kwargs):
+            captured["request"] = kwargs
+            return {
+                "AudioStream": FakeAudioStream(),
+                "RequestCharacters": len(kwargs["Text"]),
+                "ContentType": "audio/mpeg",
+            }
+
+        def describe_voices(self, **kwargs):
+            captured.setdefault("describe", []).append(kwargs)
+            return {
+                "Voices": [{"Id": "Joanna"}, {"Id": "Matthew"}],
+            }
+
+    provider = PollyTTSProvider(
+        aws_access_key_id="aws-key",
+        aws_secret_access_key="aws-secret",
+        region="us-east-1",
+        engine="neural",
+        client=FakePollyClient(),
+    )
+    result = provider.synthesize(
+        TTSRequest(
+            text="<speak>Hello</speak>",
+            use_ssml=True,
+            voice="Joanna",
+            metadata={"engine": "neural"},
+        )
+    )
+    capabilities = provider.get_capabilities()
+    voices = provider.list_voices(engine="neural")
+
+    assert result.audio_data == b"polly-audio"
+    assert captured["request"]["VoiceId"] == "Joanna"
+    assert captured["request"]["Engine"] == "neural"
+    assert captured["request"]["TextType"] == "ssml"
+    assert captured["request"]["OutputFormat"] == "mp3"
+    assert captured["request"]["SampleRate"] == "24000"
+    assert capabilities.supports_ssml
+    assert not capabilities.supports_style_prompt
+    assert capabilities.max_input_size == 6000
+    assert "mp3" in capabilities.supported_formats
+    assert voices == ("Joanna", "Matthew")
+
+
+def test_polly_provider_returns_clear_ssml_errors():
+    class InvalidSsmlError(Exception):
+        response = {
+            "Error": {
+                "Code": "InvalidSsmlException",
+                "Message": "SSML is invalid.",
+            }
+        }
+
+    class BrokenPollyClient:
+        def synthesize_speech(self, **kwargs):
+            del kwargs
+            raise InvalidSsmlError()
+
+    provider = PollyTTSProvider(
+        aws_access_key_id="aws-key",
+        aws_secret_access_key="aws-secret",
+        region="us-east-1",
+        client=BrokenPollyClient(),
+    )
+
+    try:
+        provider.synthesize(
+            TTSRequest(
+                text="<speak>Broken</speak>",
+                use_ssml=True,
+                voice="Joanna",
+            )
+        )
+    except RuntimeError as error:
+        assert "Amazon Polly rejected the SSML document" in str(error)
+    else:  # pragma: no cover - defensive test guard
+        raise AssertionError("Expected RuntimeError for invalid Polly SSML.")
+
+
+def test_gemini_provider_wraps_google_cloud_tts_and_maps_request():
+    captured = {}
+
+    class FakeResponse:
+        audio_content = b"gemini-audio"
+
+    class FakeGeminiClient:
+        def synthesize_speech(self, **kwargs):
+            captured["request"] = kwargs
+            return FakeResponse()
+
+    provider = GeminiTTSProvider(
+        project_id="sample-project",
+        service_account_json="service-account.json",
+        region="us",
+        model="gemini-2.5-flash-tts",
+        client=FakeGeminiClient(),
+    )
+    result = provider.synthesize(
+        TTSRequest(
+            text="Tell the story clearly.",
+            use_ssml=False,
+            voice="Kore",
+            metadata={
+                "style_prompt": "Say the following in a reflective way.",
+                "language_code": "en-US",
+                "model": "gemini-2.5-pro-tts",
+            },
+        )
+    )
+    capabilities = provider.get_capabilities()
+
+    assert result.audio_data == b"gemini-audio"
+    assert captured["request"]["input"].prompt == (
+        "Say the following in a reflective way."
+    )
+    assert captured["request"]["input"].text == "Tell the story clearly."
+    assert captured["request"]["voice"].name == "Kore"
+    assert captured["request"]["voice"].language_code == "en-US"
+    assert captured["request"]["voice"].model_name == "gemini-2.5-pro-tts"
+    assert capabilities.supports_style_prompt
+    assert capabilities.supports_multi_speaker
+    assert not capabilities.supports_ssml
+    assert "mp3" in capabilities.supported_formats
+    assert capabilities.max_input_size == 8000
+
+
+def test_gemini_provider_rejects_oversized_text():
+    class FakeGeminiClient:
+        def synthesize_speech(self, **kwargs):
+            del kwargs
+            return None
+
+    provider = GeminiTTSProvider(
+        project_id="sample-project",
+        service_account_json="service-account.json",
+        region="global",
+        client=FakeGeminiClient(),
+    )
+
+    try:
+        provider.synthesize(
+            TTSRequest(
+                text="x" * 4001,
+                use_ssml=False,
+                voice="Kore",
+            )
+        )
+    except ValueError as error:
+        assert "4,000-byte limit" in str(error)
+    else:  # pragma: no cover - defensive guard
+        raise AssertionError("Expected Gemini oversized input to raise ValueError.")
+
+
+def test_local_provider_wraps_pyttsx3_engine_and_returns_audio_bytes(runtime_tmp_path):
+    captured = {}
+
+    class FakeVoice:
+        def __init__(self, voice_id):
+            self.id = voice_id
+
+    class FakeEngine:
+        def setProperty(self, name, value):
+            captured.setdefault("properties", {})[name] = value
+
+        def save_to_file(self, text, filename):
+            captured["save_to_file"] = (text, filename)
+            from pathlib import Path
+
+            Path(filename).write_bytes(b"local-audio")
+
+        def runAndWait(self):
+            captured["ran"] = True
+
+        def stop(self):
+            captured["stopped"] = True
+
+        def getProperty(self, name):
+            if name == "voices":
+                return [FakeVoice("voice-a"), FakeVoice("voice-b")]
+            return None
+
+    def fake_engine_factory(driver_name):
+        captured["driver_name"] = driver_name
+        return FakeEngine()
+
+    provider = LocalPythonTTSProvider(
+        driver_name="espeak",
+        engine_factory=fake_engine_factory,
+    )
+    result = provider.synthesize(
+        TTSRequest(
+            text="Local narration test.",
+            use_ssml=False,
+            voice="voice-a",
+            metadata={"rate": 180, "volume": 0.7},
+        )
+    )
+    voices = provider.list_voices()
+    capabilities = provider.get_capabilities()
+
+    assert result.audio_data == b"local-audio"
+    assert captured["driver_name"] == "espeak"
+    assert captured["save_to_file"][0] == "Local narration test."
+    assert captured["properties"]["voice"] == "voice-a"
+    assert captured["properties"]["rate"] == 180
+    assert captured["properties"]["volume"] == 0.7
+    assert captured["ran"]
+    assert captured["stopped"]
+    assert voices == ("voice-a", "voice-b")
+    assert capabilities.supports_offline
+    assert not capabilities.supports_ssml
+    assert capabilities.supported_formats == ("mp3",)
+
+
+def test_local_provider_rejects_ssml_input():
+    class FakeEngine:
+        def stop(self):
+            return None
+
+    provider = LocalPythonTTSProvider(
+        engine_factory=lambda driver_name: FakeEngine()
+    )
+
+    try:
+        provider.synthesize(
+            TTSRequest(text="<speak>Hello</speak>", use_ssml=True)
+        )
+    except ValueError as error:
+        assert "does not support SSML" in str(error)
+    else:  # pragma: no cover - defensive guard
+        raise AssertionError("Expected local provider SSML rejection.")
+
+
+def test_main_controller_builds_tts_processor_from_provider_config(monkeypatch):
+    captured = {}
+
+    class FakeProcessor:
+        def __init__(self, provider_config):
+            captured["provider_config"] = provider_config
+
+    controller = MainController.__new__(MainController)
+    controller.settings = AppSettings(tts_provider="azure")
+    controller.tts_processor = None
+    monkeypatch.setattr(
+        controller,
+        "_resolve_tts_provider_config",
+        lambda: TTSProviderConfig(
+            provider_name="azure",
+            credentials={
+                "subscription_key": "controller-key",
+                "region": "controller-region",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        "app.controller.main_controller.TTSProcessor",
+        FakeProcessor,
+    )
+
+    processor = controller._ensure_tts_processor()
+
+    assert processor is controller.tts_processor
+    assert captured["provider_config"].provider_name == "azure"
+    assert captured["provider_config"].credentials["subscription_key"] == "controller-key"
+    assert captured["provider_config"].credentials["region"] == "controller-region"
+
+
+def test_batch_export_worker_uses_provider_config_for_synthesis(
+    runtime_tmp_path, monkeypatch
+):
+    captured = {}
+    rows = [
+        {
+            "item_number": 1,
+            "title": "Architecture",
+            "content_mode": "combine",
+            "resolved_text": "Provider architecture export.",
+        }
+    ]
+
+    class FakeProcessor:
+        def text_to_speech(self, text, use_ssml=False, voice=None, metadata=None):
+            captured["synthesis"] = (text, use_ssml, voice, metadata)
+            return b"worker-audio"
+
+        def get_capabilities(self):
+            return TTSProviderCapabilities(supports_ssml=True)
+
+    def fake_create_tts_processor(provider_config):
+        captured["provider_config"] = provider_config
+        return FakeProcessor()
+
+    monkeypatch.setattr(
+        "app.controller.background_workers.create_tts_processor",
+        fake_create_tts_processor,
+    )
+
+    worker = BatchExportWorker(
+        rows=rows,
+        output_dir=runtime_tmp_path,
+        settings=AppSettings(auto_clean_text=False, tts_provider="azure"),
+        provider_config=TTSProviderConfig(
+            provider_name="azure",
+            credentials={
+                "subscription_key": "worker-key",
+                "region": "worker-region",
+            },
+        ),
+    )
+
+    worker.run()
+
+    assert captured["provider_config"].provider_name == "azure"
+    assert captured["provider_config"].credentials["subscription_key"] == "worker-key"
+    assert captured["provider_config"].credentials["region"] == "worker-region"
+    assert captured["synthesis"][1] is True
+    assert captured["synthesis"][2] == "en-US-GuyNeural"

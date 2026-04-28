@@ -58,3 +58,9 @@ credentials are missing:
   connection test.
 - Azure credentials are required for preview generation, exported files, and
   batch document audio export.
+
+See also:
+
+- [Gemini TTS configuration](gemini_config.md)
+- [Offline Python TTS configuration](local_tts_config.md)
+- [Amazon Polly configuration](polly_config.md)

@@ -34,9 +34,18 @@ across the application.
 
 The settings editor currently supports:
 
+- TTS provider selection
 - Azure key
 - Azure region
 - Azure connection testing
+- dedicated Gemini config file selection
+- Gemini model selection
+- Gemini language code
+- Gemini style prompt
+- dedicated optional local TTS config file selection
+- local TTS driver selection
+- dedicated Amazon Polly config file selection
+- Polly engine selection
 - voice selection
 - speaking rate
 - synthesis volume
