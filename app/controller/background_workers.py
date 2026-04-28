@@ -79,6 +79,15 @@ def build_provider_input(text, settings, provider_capabilities, cleaner=None):
 def build_provider_metadata(settings):
     """Build provider-specific synthesis metadata from saved settings."""
     provider_name = getattr(settings, "tts_provider", "azure")
+    if provider_name == "local":
+        return {
+            "rate": map_speaking_rate_to_local_value(
+                getattr(settings, "speaking_rate", "medium")
+            ),
+            "volume": map_volume_to_local_value(
+                getattr(settings, "synthesis_volume", "medium")
+            ),
+        }
     if provider_name == "gemini":
         return {
             "style_prompt": getattr(settings, "gemini_style_prompt", ""),
@@ -90,6 +99,29 @@ def build_provider_metadata(settings):
             "engine": getattr(settings, "polly_engine", "neural"),
         }
     return {}
+
+
+def map_speaking_rate_to_local_value(rate_name):
+    """Map app speaking-rate labels onto a reasonable local pyttsx3 rate."""
+    return {
+        "x-slow": 110,
+        "slow": 140,
+        "medium": 175,
+        "fast": 210,
+        "x-fast": 245,
+    }.get(rate_name, 175)
+
+
+def map_volume_to_local_value(volume_name):
+    """Map app volume labels onto the local 0.0-1.0 pyttsx3 volume range."""
+    return {
+        "silent": 0.0,
+        "x-soft": 0.2,
+        "soft": 0.4,
+        "medium": 0.6,
+        "loud": 0.8,
+        "x-loud": 1.0,
+    }.get(volume_name, 0.6)
 
 
 class DocumentParseWorker(QObject):

@@ -15,6 +15,7 @@ dependencies = [
     "openpyxl",
     "pandas",
     "pillow",
+    "pyttsx3",
     "pypdfium2",
     "pypdf",
     "pytesseract",
@@ -49,6 +50,7 @@ loguru = "*"
 openpyxl = "*"
 pandas = "*"
 pillow = "*"
+pyttsx3 = "*"
 pypdfium2 = "*"
 pypdf = "*"
 pytesseract = "*"

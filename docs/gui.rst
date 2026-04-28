@@ -42,6 +42,8 @@ The settings editor currently supports:
 - Gemini model selection
 - Gemini language code
 - Gemini style prompt
+- dedicated optional local TTS config file selection
+- local TTS driver selection
 - dedicated Amazon Polly config file selection
 - Polly engine selection
 - voice selection

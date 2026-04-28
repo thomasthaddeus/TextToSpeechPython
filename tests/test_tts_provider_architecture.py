@@ -4,6 +4,7 @@ from app.model.app_settings import AppSettings
 from app.model.processors.tts_processor import TTSProcessor
 from app.model.tts_providers.azure_provider import AzureTTSProvider
 from app.model.tts_providers.gemini_provider import GeminiTTSProvider
+from app.model.tts_providers.local_provider import LocalPythonTTSProvider
 from app.model.tts_providers.polly_provider import PollyTTSProvider
 from app.model.tts_providers.models import (
     TTSProviderCapabilities,
@@ -254,6 +255,86 @@ def test_gemini_provider_rejects_oversized_text():
         assert "4,000-byte limit" in str(error)
     else:  # pragma: no cover - defensive guard
         raise AssertionError("Expected Gemini oversized input to raise ValueError.")
+
+
+def test_local_provider_wraps_pyttsx3_engine_and_returns_audio_bytes(runtime_tmp_path):
+    captured = {}
+
+    class FakeVoice:
+        def __init__(self, voice_id):
+            self.id = voice_id
+
+    class FakeEngine:
+        def setProperty(self, name, value):
+            captured.setdefault("properties", {})[name] = value
+
+        def save_to_file(self, text, filename):
+            captured["save_to_file"] = (text, filename)
+            from pathlib import Path
+
+            Path(filename).write_bytes(b"local-audio")
+
+        def runAndWait(self):
+            captured["ran"] = True
+
+        def stop(self):
+            captured["stopped"] = True
+
+        def getProperty(self, name):
+            if name == "voices":
+                return [FakeVoice("voice-a"), FakeVoice("voice-b")]
+            return None
+
+    def fake_engine_factory(driver_name):
+        captured["driver_name"] = driver_name
+        return FakeEngine()
+
+    provider = LocalPythonTTSProvider(
+        driver_name="espeak",
+        engine_factory=fake_engine_factory,
+    )
+    result = provider.synthesize(
+        TTSRequest(
+            text="Local narration test.",
+            use_ssml=False,
+            voice="voice-a",
+            metadata={"rate": 180, "volume": 0.7},
+        )
+    )
+    voices = provider.list_voices()
+    capabilities = provider.get_capabilities()
+
+    assert result.audio_data == b"local-audio"
+    assert captured["driver_name"] == "espeak"
+    assert captured["save_to_file"][0] == "Local narration test."
+    assert captured["properties"]["voice"] == "voice-a"
+    assert captured["properties"]["rate"] == 180
+    assert captured["properties"]["volume"] == 0.7
+    assert captured["ran"]
+    assert captured["stopped"]
+    assert voices == ("voice-a", "voice-b")
+    assert capabilities.supports_offline
+    assert not capabilities.supports_ssml
+    assert capabilities.supported_formats == ("mp3",)
+
+
+def test_local_provider_rejects_ssml_input():
+    class FakeEngine:
+        def stop(self):
+            return None
+
+    provider = LocalPythonTTSProvider(
+        engine_factory=lambda driver_name: FakeEngine()
+    )
+
+    try:
+        provider.synthesize(
+            TTSRequest(text="<speak>Hello</speak>", use_ssml=True)
+        )
+    except ValueError as error:
+        assert "does not support SSML" in str(error)
+    else:  # pragma: no cover - defensive guard
+        raise AssertionError("Expected local provider SSML rejection.")
 
 
 def test_main_controller_builds_tts_processor_from_provider_config(monkeypatch):

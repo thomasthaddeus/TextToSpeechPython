@@ -2,9 +2,11 @@
 
 from app.model.api.api_config import get_api_settings
 from app.model.api.gemini_config import get_gemini_settings
+from app.model.api.local_tts_config import get_local_tts_settings
 from app.model.api.polly_config import get_polly_settings
 from app.model.tts_providers.azure_provider import AzureTTSProvider
 from app.model.tts_providers.gemini_provider import GeminiTTSProvider
+from app.model.tts_providers.local_provider import LocalPythonTTSProvider
 from app.model.tts_providers.polly_provider import PollyTTSProvider
 from app.model.tts_providers.models import TTSProviderConfig
 
@@ -13,6 +15,7 @@ DEFAULT_PROVIDER_NAME = "azure"
 PROVIDER_DISPLAY_NAMES = {
     "azure": "Azure Speech",
     "gemini": "Gemini TTS",
+    "local": "Offline Python TTS",
     "polly": "Amazon Polly",
 }
 
@@ -98,6 +101,27 @@ def resolve_tts_provider_config(settings, fallback_config_path=".env"):
             },
         )
 
+    if provider_name == "local":
+        config_path = (
+            getattr(settings, "local_tts_config_path", "") or ".local_tts.env"
+        ).strip()
+        options = {
+            "driver_name": getattr(settings, "local_tts_driver_name", "auto"),
+        }
+        try:
+            file_settings = get_local_tts_settings(config_path)
+        except Exception:
+            file_settings = None
+        if file_settings is not None:
+            options["driver_name"] = file_settings.get("driver_name", "auto")
+
+        return TTSProviderConfig(
+            provider_name=provider_name,
+            credentials={},
+            api_config_path=config_path,
+            options=options,
+        )
+
     raise ValueError(f"Unsupported TTS provider '{provider_name}'.")
 
 
@@ -148,6 +172,11 @@ def create_tts_provider(provider_config):
             model=str(
                 provider_config.options.get("model", "gemini-2.5-flash-tts")
             ),
+        )
+
+    if provider_name == "local":
+        return LocalPythonTTSProvider(
+            driver_name=str(provider_config.options.get("driver_name", "auto")),
         )
 
     raise ValueError(f"Unsupported TTS provider '{provider_name}'.")

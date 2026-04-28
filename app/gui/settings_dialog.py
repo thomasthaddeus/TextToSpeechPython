@@ -44,12 +44,14 @@ class SettingsEditor(QWidget):
     PROVIDERS = (
         ("azure", "Azure Speech"),
         ("gemini", "Gemini TTS"),
+        ("local", "Offline Python TTS"),
         ("polly", "Amazon Polly"),
     )
     GEMINI_MODEL_OPTIONS = [
         "gemini-2.5-flash-tts",
         "gemini-2.5-pro-tts",
     ]
+    LOCAL_DRIVER_OPTIONS = ["auto", "sapi5", "nsss", "espeak"]
     POLLY_ENGINE_OPTIONS = ["standard", "neural", "long-form", "generative"]
 
     def __init__(self, settings, parent=None):
@@ -109,6 +111,24 @@ class SettingsEditor(QWidget):
             "Say the following in a curious, warm, conversational way."
         )
         form_layout.addRow("Gemini Style Prompt", self.gemini_style_prompt_edit)
+
+        local_path_row = QHBoxLayout()
+        self.local_tts_config_path_edit = QLineEdit(self)
+        self.local_tts_config_path_edit.setPlaceholderText(".local_tts.env")
+        self.local_tts_config_browse_button = QPushButton("Browse", self)
+        self.local_tts_config_browse_button.clicked.connect(
+            self._choose_local_tts_config_file
+        )
+        local_path_row.addWidget(self.local_tts_config_path_edit)
+        local_path_row.addWidget(self.local_tts_config_browse_button)
+        form_layout.addRow("Local TTS Config File", local_path_row)
+
+        self.local_tts_driver_combo = QComboBox(self)
+        self.local_tts_driver_combo.addItems(self.LOCAL_DRIVER_OPTIONS)
+        self.local_tts_driver_combo.currentIndexChanged.connect(
+            self._handle_provider_changed
+        )
+        form_layout.addRow("Local TTS Driver", self.local_tts_driver_combo)
 
         polly_path_row = QHBoxLayout()
         self.polly_config_path_edit = QLineEdit(self)
@@ -220,6 +240,8 @@ class SettingsEditor(QWidget):
         self.gemini_model_combo.setCurrentText(self.settings.gemini_model)
         self.gemini_language_code_edit.setText(self.settings.gemini_language_code)
         self.gemini_style_prompt_edit.setText(self.settings.gemini_style_prompt)
+        self.local_tts_config_path_edit.setText(self.settings.local_tts_config_path)
+        self.local_tts_driver_combo.setCurrentText(self.settings.local_tts_driver_name)
         self.polly_config_path_edit.setText(self.settings.polly_config_path)
         self.polly_engine_combo.setCurrentText(self.settings.polly_engine)
         self.rate_combo.setCurrentText(self.settings.speaking_rate)
@@ -292,6 +314,16 @@ class SettingsEditor(QWidget):
         if chosen_file:
             self.gemini_config_path_edit.setText(chosen_file)
 
+    def _choose_local_tts_config_file(self):
+        chosen_file, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose Local TTS Config File",
+            str(Path.cwd()),
+            "INI Files (*.ini *.env *.cfg);;All Files (*.*)",
+        )
+        if chosen_file:
+            self.local_tts_config_path_edit.setText(chosen_file)
+
     def get_settings(self):
         """
         Build a validated settings object from the dialog state.
@@ -339,6 +371,12 @@ class SettingsEditor(QWidget):
         self.settings.gemini_style_prompt = (
             self.gemini_style_prompt_edit.text().strip()
         )
+        self.settings.local_tts_config_path = (
+            self.local_tts_config_path_edit.text().strip() or ".local_tts.env"
+        )
+        self.settings.local_tts_driver_name = (
+            self.local_tts_driver_combo.currentText()
+        )
         self.settings.polly_config_path = (
             self.polly_config_path_edit.text().strip() or ".polly.env"
         )
@@ -369,6 +407,7 @@ class SettingsEditor(QWidget):
     def _refresh_provider_controls(self):
         using_azure = self._current_provider_name() == "azure"
         using_gemini = self._current_provider_name() == "gemini"
+        using_local = self._current_provider_name() == "local"
         using_polly = self._current_provider_name() == "polly"
 
         self.azure_key_edit.setEnabled(using_azure)
@@ -378,6 +417,9 @@ class SettingsEditor(QWidget):
         self.gemini_model_combo.setEnabled(using_gemini)
         self.gemini_language_code_edit.setEnabled(using_gemini)
         self.gemini_style_prompt_edit.setEnabled(using_gemini)
+        self.local_tts_config_path_edit.setEnabled(using_local)
+        self.local_tts_config_browse_button.setEnabled(using_local)
+        self.local_tts_driver_combo.setEnabled(using_local)
         self.polly_config_path_edit.setEnabled(using_polly)
         self.polly_config_browse_button.setEnabled(using_polly)
         self.polly_engine_combo.setEnabled(using_polly)
@@ -438,6 +480,31 @@ class SettingsEditor(QWidget):
                 },
             )
 
+        if provider_name == "local":
+            local_tts_config_path = self.local_tts_config_path_edit.text().strip()
+            options = {
+                "driver_name": self.local_tts_driver_combo.currentText(),
+            }
+            if local_tts_config_path:
+                from app.model.api.local_tts_config import get_local_tts_settings
+
+                try:
+                    file_settings = get_local_tts_settings(local_tts_config_path)
+                except FileNotFoundError:
+                    file_settings = None
+                if file_settings is not None:
+                    options["driver_name"] = file_settings.get(
+                        "driver_name",
+                        options["driver_name"],
+                    )
+
+            return TTSProviderConfig(
+                provider_name="local",
+                credentials={},
+                api_config_path=local_tts_config_path or ".local_tts.env",
+                options=options,
+            )
+
         polly_config_path = self.polly_config_path_edit.text().strip()
         if not polly_config_path:
             raise ValueError(
@@ -460,12 +527,16 @@ class SettingsEditor(QWidget):
         try:
             provider_config = self._build_provider_config()
             provider = create_tts_provider(provider_config)
-            if provider_name in {"gemini", "polly"}:
+            if provider_name in {"gemini", "local", "polly"}:
                 voices = provider.list_voices(
                     engine=(
                         self.polly_engine_combo.currentText()
                         if provider_name == "polly"
-                        else self.gemini_model_combo.currentText()
+                        else (
+                            self.gemini_model_combo.currentText()
+                            if provider_name == "gemini"
+                            else self.local_tts_driver_combo.currentText()
+                        )
                     )
                 )
                 if voices:
@@ -492,6 +563,13 @@ class SettingsEditor(QWidget):
                             or "en-US"
                         ),
                         "style_prompt": self.gemini_style_prompt_edit.text().strip(),
+                    }
+                )
+            elif provider_name == "local":
+                metadata.update(
+                    {
+                        "rate": 150,
+                        "volume": 1.0,
                     }
                 )
             audio_data = provider.synthesize(

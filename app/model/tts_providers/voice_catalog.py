@@ -59,6 +59,8 @@ GEMINI_VOICE_SUGGESTIONS = (
 def get_voice_suggestions(provider_name):
     """Return a provider-specific list of suggested voice identifiers."""
     normalized_name = (provider_name or "azure").strip().lower()
+    if normalized_name == "local":
+        return ()
     if normalized_name == "polly":
         return POLLY_VOICE_SUGGESTIONS
     if normalized_name == "gemini":

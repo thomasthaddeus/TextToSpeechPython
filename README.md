@@ -10,9 +10,9 @@ The current application supports:
 
 - editing or pasting source text in the main window
 - live SSML preview generation
-- Azure Speech, Gemini TTS, and Amazon Polly synthesis to preview or exported `.mp3` files
+- Azure Speech, Gemini TTS, Amazon Polly, and offline Python TTS synthesis to preview or exported `.mp3` files
 - a collapsible settings sidebar for provider selection, Azure credentials,
-  Gemini config, Amazon Polly config, voice, output directory, logging,
+  Gemini config, local TTS config, Amazon Polly config, voice, output directory, logging,
   playback volume, and advanced SSML controls
 - document import for `.txt`, `.docx`, `.pdf`, `.html`, `.htm`, `.rtf`,
   `.epub`, `.xlsx`, `.xls`, `.csv`, `.pptx`, and common image formats
@@ -30,7 +30,8 @@ The current application supports:
 - Python 3.11+
 - Poetry
 - Azure Speech resource with a valid key and region, a Google Cloud Gemini TTS
-  config file, or Amazon Polly AWS credentials in a dedicated Polly config file
+  config file, Amazon Polly AWS credentials in a dedicated Polly config file,
+  or the bundled offline Python TTS dependency
 - Tesseract OCR for scanned PDFs and image imports
 
 ## Installation
@@ -125,6 +126,19 @@ region = global
 Set `TTS Provider` to `Gemini TTS`, point the app at that config file, choose a
 Gemini TTS model, and optionally provide a natural-language style prompt for
 delivery control.
+
+Offline Python TTS can run without cloud credentials. It also supports an
+optional dedicated local config file for driver troubleshooting. Example
+`.local_tts.env`:
+
+```ini
+[LOCAL_TTS]
+driver_name = auto
+```
+
+Set `TTS Provider` to `Offline Python TTS`, optionally point the app at that
+config file, and choose a local driver when platform-specific troubleshooting is
+needed.
 
 ## Main Workflow
 

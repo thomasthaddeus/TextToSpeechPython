@@ -29,6 +29,8 @@ class AppSettings:
     gemini_model: str = "gemini-2.5-flash-tts"
     gemini_language_code: str = "en-US"
     gemini_style_prompt: str = ""
+    local_tts_config_path: str = ".local_tts.env"
+    local_tts_driver_name: str = "auto"
     polly_config_path: str = ".polly.env"
     polly_engine: str = "neural"
     output_dir: str = "data/dynamic/audio"

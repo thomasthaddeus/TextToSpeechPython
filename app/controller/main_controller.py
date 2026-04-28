@@ -64,6 +64,8 @@ class MainController(QObject):
         "gemini_language_code",
         "gemini_style_prompt",
         "gemini_config_path",
+        "local_tts_driver_name",
+        "local_tts_config_path",
         "polly_engine",
         "polly_config_path",
         "output_dir",
