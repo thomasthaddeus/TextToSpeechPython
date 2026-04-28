@@ -56,8 +56,20 @@ class Ui_Dialog:
         selection_row = QHBoxLayout()
         self.selectAllButton = QPushButton("Select All", dialog)
         self.clearSelectionButton = QPushButton("Clear Selection", dialog)
+        self.cleanSelectedButton = QPushButton("Clean Selected", dialog)
+        self.splitSelectedButton = QPushButton("Split Selected", dialog)
+        self.mergeSelectedButton = QPushButton("Merge Selected", dialog)
+        self.duplicateSelectedButton = QPushButton("Duplicate Selected", dialog)
+        self.deleteSelectedButton = QPushButton("Delete Selected", dialog)
+        self.restoreSelectedButton = QPushButton("Restore Selected", dialog)
         selection_row.addWidget(self.selectAllButton)
         selection_row.addWidget(self.clearSelectionButton)
+        selection_row.addWidget(self.cleanSelectedButton)
+        selection_row.addWidget(self.splitSelectedButton)
+        selection_row.addWidget(self.mergeSelectedButton)
+        selection_row.addWidget(self.duplicateSelectedButton)
+        selection_row.addWidget(self.deleteSelectedButton)
+        selection_row.addWidget(self.restoreSelectedButton)
         selection_row.addStretch(1)
         layout.addLayout(selection_row)
 
@@ -72,7 +84,9 @@ class Ui_Dialog:
             QAbstractItemView.SelectionMode.ExtendedSelection
         )
         self.previewTable.setEditTriggers(
-            QAbstractItemView.EditTrigger.NoEditTriggers
+            QAbstractItemView.EditTrigger.DoubleClicked
+            | QAbstractItemView.EditTrigger.EditKeyPressed
+            | QAbstractItemView.EditTrigger.AnyKeyPressed
         )
         self.previewTable.verticalHeader().setVisible(False)
         self.previewTable.horizontalHeader().setStretchLastSection(True)

@@ -1,4 +1,4 @@
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QItemSelectionModel, Qt
 from PyQt6.QtWidgets import QMainWindow
 
 from app.controller.main_controller import MainController
@@ -228,3 +228,85 @@ def test_import_selected_rows_emits_text_and_accepts_dialog(qt_app):
 
     assert imported_text == ["Main narration text."]
     assert dialog.result() == dialog.DialogCode.Accepted
+
+
+def test_import_dialog_uses_edited_row_text_for_import(qt_app):
+    del qt_app
+    dialog = SecondApp()
+    controller = SecondController(dialog)
+    imported_text = []
+    dialog.textImported.connect(imported_text.append)
+    rows = [
+        {
+            "item_number": 1,
+            "title": "Editable Row",
+            "primary_text": "Original parser text.",
+            "secondary_text": "Original context.",
+            "source_type": "txt",
+            "metadata": {},
+        }
+    ]
+    controller._handle_load_finished(rows)
+    dialog.contentModeComboBox.setCurrentText("Text Block Only")
+
+    dialog.previewTable.item(0, 1).setText("Edited narration text.")
+    controller.import_text()
+
+    assert imported_text == ["Edited narration text."]
+
+
+def test_import_dialog_review_actions_modify_rows(qt_app):
+    del qt_app
+    dialog = SecondApp()
+    controller = SecondController(dialog)
+    rows = [
+        {
+            "item_number": 1,
+            "title": "Row One",
+            "primary_text": "First sentence. Second sentence.",
+            "secondary_text": "Context one.",
+            "source_type": "txt",
+            "metadata": {},
+        },
+        {
+            "item_number": 2,
+            "title": "Row Two",
+            "primary_text": "Third sentence.",
+            "secondary_text": "Context two.",
+            "source_type": "txt",
+            "metadata": {},
+        },
+    ]
+    controller._handle_load_finished(rows)
+
+    dialog.previewTable.selectRow(0)
+    controller.duplicate_selected_rows()
+    assert dialog.previewTable.rowCount() == 3
+    assert "Copy" in dialog.previewTable.item(1, 0).text()
+
+    dialog.previewTable.clearSelection()
+    dialog.previewTable.selectRow(0)
+    controller.split_selected_rows()
+    assert dialog.previewTable.rowCount() == 4
+    assert "Second sentence." in dialog.previewTable.item(1, 1).text()
+
+    dialog.previewTable.clearSelection()
+    selection_model = dialog.previewTable.selectionModel()
+    selection_model.select(
+        dialog.previewTable.model().index(0, 0),
+        QItemSelectionModel.SelectionFlag.Select
+        | QItemSelectionModel.SelectionFlag.Rows,
+    )
+    selection_model.select(
+        dialog.previewTable.model().index(1, 0),
+        QItemSelectionModel.SelectionFlag.Select
+        | QItemSelectionModel.SelectionFlag.Rows,
+    )
+    controller.merge_selected_rows()
+    assert dialog.previewTable.rowCount() == 3
+    assert "First sentence." in dialog.previewTable.item(0, 1).text()
+    assert "Second sentence." in dialog.previewTable.item(0, 1).text()
+
+    dialog.previewTable.item(0, 1).setText("Manual edit")
+    controller.restore_selected_rows()
+    assert dialog.previewTable.item(0, 1).text() == "First sentence. Second sentence."

@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import QTableWidgetItem
 
 from app.controller.background_workers import DocumentParseWorker
 from app.model.scraper.document_scraper import DocumentScraper
+from app.utils.text_cleaner import TextCleaner
 from loguru import logger
 
 
@@ -154,6 +155,8 @@ class SecondController(QObject):
         self.load_thread = None
         self.load_worker = None
         self.current_mode_map = {}
+        self.text_cleaner = TextCleaner()
+        self._updating_table = False
         self.view.browseButton.clicked.connect(self.choose_file)
         self.view.loadButton.clicked.connect(self.load_file)
         self.view.cancelLoadButton.clicked.connect(self.cancel_load)
@@ -163,11 +166,65 @@ class SecondController(QObject):
         self.view.clearSelectionButton.clicked.connect(
             self.view.previewTable.clearSelection
         )
+        self.view.cleanSelectedButton.clicked.connect(self.clean_selected_rows)
+        self.view.splitSelectedButton.clicked.connect(self.split_selected_rows)
+        self.view.mergeSelectedButton.clicked.connect(self.merge_selected_rows)
+        self.view.duplicateSelectedButton.clicked.connect(
+            self.duplicate_selected_rows
+        )
+        self.view.deleteSelectedButton.clicked.connect(self.delete_selected_rows)
+        self.view.restoreSelectedButton.clicked.connect(self.restore_selected_rows)
+        self.view.previewTable.itemChanged.connect(self._handle_preview_item_changed)
         self.view.closeButton.clicked.connect(self.view.close)
         self._apply_format_profile(None)
         self._surface_document_dependency_status()
 
+    def _normalize_row(self, row):
+        normalized = dict(row)
+        normalized["title"] = str(normalized.get("title", ""))
+        normalized["primary_text"] = str(normalized.get("primary_text", ""))
+        normalized["secondary_text"] = str(normalized.get("secondary_text", ""))
+        normalized.setdefault("original_title", normalized["title"])
+        normalized.setdefault("original_primary_text", normalized["primary_text"])
+        normalized.setdefault("original_secondary_text", normalized["secondary_text"])
+        return normalized
+
+    def _sync_rows_from_table(self):
+        if self._updating_table:
+            return
+        for row_index, row in enumerate(self.import_rows):
+            if row_index >= self.view.previewTable.rowCount():
+                break
+            for column_index, field_name in (
+                (0, "title"),
+                (1, "primary_text"),
+                (2, "secondary_text"),
+            ):
+                item = self.view.previewTable.item(row_index, column_index)
+                if item is not None:
+                    row[field_name] = item.text()
+
+    def _handle_preview_item_changed(self, item):
+        if self._updating_table:
+            return
+        if item is None:
+            return
+        row_index = item.row()
+        if not 0 <= row_index < len(self.import_rows):
+            return
+        field_name = {0: "title", 1: "primary_text", 2: "secondary_text"}.get(
+            item.column()
+        )
+        if field_name:
+            self.import_rows[row_index][field_name] = item.text()
+
+    def _selected_row_indexes(self):
+        return sorted(
+            {index.row() for index in self.view.previewTable.selectionModel().selectedRows()}
+        )
+
     def _selected_rows(self):
+        self._sync_rows_from_table()
         indexes = self.view.previewTable.selectionModel().selectedRows()
         selected = []
         for index in indexes:
@@ -209,6 +266,7 @@ class SecondController(QObject):
         return payload_rows, "\n\n".join(text_chunks)
 
     def _populate_preview_table(self):
+        self._updating_table = True
         self.view.previewTable.setRowCount(len(self.import_rows))
         for row_index, row in enumerate(self.import_rows):
             item_label = row.get("title") or f'Item {row["item_number"]}'
@@ -221,6 +279,158 @@ class SecondController(QObject):
             self.view.previewTable.setItem(row_index, 2, secondary_cell)
 
         self.view.previewTable.resizeColumnsToContents()
+        self._updating_table = False
+
+    def _replace_rows_and_reselect(self, rows, selected_indexes=None):
+        self.import_rows = [self._normalize_row(row) for row in rows]
+        self._populate_preview_table()
+        self.view.previewTable.clearSelection()
+        for row_index in selected_indexes or []:
+            if 0 <= row_index < self.view.previewTable.rowCount():
+                self.view.previewTable.selectRow(row_index)
+
+    def clean_selected_rows(self):
+        self._sync_rows_from_table()
+        selected_indexes = self._selected_row_indexes()
+        if not selected_indexes:
+            self.view.infoLabel.setText("Select rows before cleaning them.")
+            return
+        for row_index in selected_indexes:
+            row = self.import_rows[row_index]
+            row["primary_text"] = self.text_cleaner.clean_all(row["primary_text"])
+            row["secondary_text"] = self.text_cleaner.clean_all(row["secondary_text"])
+        self._replace_rows_and_reselect(self.import_rows, selected_indexes)
+        self.view.infoLabel.setText(f"Cleaned {len(selected_indexes)} selected row(s).")
+
+    def duplicate_selected_rows(self):
+        self._sync_rows_from_table()
+        selected_indexes = self._selected_row_indexes()
+        if not selected_indexes:
+            self.view.infoLabel.setText("Select rows before duplicating them.")
+            return
+        rows = [dict(row) for row in self.import_rows]
+        offset = 0
+        new_selection = []
+        for row_index in selected_indexes:
+            insert_at = row_index + 1 + offset
+            duplicate = dict(rows[row_index + offset])
+            duplicate["title"] = f'{duplicate.get("title", "Item")} Copy'
+            rows.insert(insert_at, duplicate)
+            new_selection.append(insert_at)
+            offset += 1
+        self._replace_rows_and_reselect(rows, new_selection)
+        self.view.infoLabel.setText(f"Duplicated {len(new_selection)} row(s).")
+
+    def delete_selected_rows(self):
+        self._sync_rows_from_table()
+        selected_indexes = self._selected_row_indexes()
+        if not selected_indexes:
+            self.view.infoLabel.setText("Select rows before deleting them.")
+            return
+        remaining_rows = [
+            row for row_index, row in enumerate(self.import_rows)
+            if row_index not in set(selected_indexes)
+        ]
+        self._replace_rows_and_reselect(remaining_rows)
+        self.view.infoLabel.setText(f"Deleted {len(selected_indexes)} selected row(s).")
+
+    def restore_selected_rows(self):
+        self._sync_rows_from_table()
+        selected_indexes = self._selected_row_indexes()
+        if not selected_indexes:
+            self.view.infoLabel.setText("Select rows before restoring them.")
+            return
+        for row_index in selected_indexes:
+            row = self.import_rows[row_index]
+            row["title"] = row.get("original_title", row.get("title", ""))
+            row["primary_text"] = row.get(
+                "original_primary_text",
+                row.get("primary_text", ""),
+            )
+            row["secondary_text"] = row.get(
+                "original_secondary_text",
+                row.get("secondary_text", ""),
+            )
+        self._replace_rows_and_reselect(self.import_rows, selected_indexes)
+        self.view.infoLabel.setText(f"Restored {len(selected_indexes)} row(s).")
+
+    def split_selected_rows(self):
+        self._sync_rows_from_table()
+        selected_indexes = self._selected_row_indexes()
+        if not selected_indexes:
+            self.view.infoLabel.setText("Select a row before splitting it.")
+            return
+
+        rows = [dict(row) for row in self.import_rows]
+        new_selection = []
+        offset = 0
+        for row_index in selected_indexes:
+            active_index = row_index + offset
+            row = rows[active_index]
+            parts = self._split_text_for_row(row.get("primary_text", ""))
+            if len(parts) < 2:
+                continue
+            row["primary_text"] = parts[0]
+            new_row = dict(row)
+            new_row["title"] = f'{row.get("title", "Item")} Part 2'
+            new_row["primary_text"] = parts[1]
+            rows.insert(active_index + 1, new_row)
+            new_selection.extend([active_index, active_index + 1])
+            offset += 1
+
+        if not new_selection:
+            self.view.infoLabel.setText(
+                "Selected row text could not be split. Add a blank line or more text first."
+            )
+            return
+        self._replace_rows_and_reselect(rows, new_selection)
+        self.view.infoLabel.setText("Split selected row text into separate rows.")
+
+    def _split_text_for_row(self, text):
+        normalized = (text or "").strip()
+        if "\n\n" in normalized:
+            first, rest = normalized.split("\n\n", 1)
+            return [first.strip(), rest.strip()]
+        sentences = [part.strip() for part in normalized.split(". ") if part.strip()]
+        if len(sentences) > 1:
+            return [sentences[0] + ".", ". ".join(sentences[1:])]
+        words = normalized.split()
+        if len(words) < 2:
+            return [normalized]
+        midpoint = len(words) // 2
+        return [" ".join(words[:midpoint]), " ".join(words[midpoint:])]
+
+    def merge_selected_rows(self):
+        self._sync_rows_from_table()
+        selected_indexes = self._selected_row_indexes()
+        if len(selected_indexes) < 2:
+            self.view.infoLabel.setText("Select at least two rows before merging.")
+            return
+
+        rows = [dict(row) for row in self.import_rows]
+        first_index = selected_indexes[0]
+        selected_rows = [rows[index] for index in selected_indexes]
+        merged_row = dict(selected_rows[0])
+        merged_row["title"] = " + ".join(
+            row.get("title", f"Item {index + 1}")
+            for index, row in zip(selected_indexes, selected_rows)
+            if row.get("title")
+        ) or selected_rows[0].get("title", "Merged Row")
+        merged_row["primary_text"] = "\n\n".join(
+            row.get("primary_text", "").strip()
+            for row in selected_rows
+            if row.get("primary_text", "").strip()
+        )
+        merged_row["secondary_text"] = "\n\n".join(
+            row.get("secondary_text", "").strip()
+            for row in selected_rows
+            if row.get("secondary_text", "").strip()
+        )
+        for row_index in reversed(selected_indexes):
+            rows.pop(row_index)
+        rows.insert(first_index, merged_row)
+        self._replace_rows_and_reselect(rows, [first_index])
+        self.view.infoLabel.setText(f"Merged {len(selected_indexes)} selected row(s).")
 
     def _source_type_for_rows(self, rows):
         source_types = {
@@ -274,6 +484,12 @@ class SecondController(QObject):
             "batchExportButton",
             "selectAllButton",
             "clearSelectionButton",
+            "cleanSelectedButton",
+            "splitSelectedButton",
+            "mergeSelectedButton",
+            "duplicateSelectedButton",
+            "deleteSelectedButton",
+            "restoreSelectedButton",
         ):
             getattr(self.view, button_name).setEnabled(not is_loading)
         self.view.cancelLoadButton.setEnabled(is_loading)
@@ -349,7 +565,7 @@ class SecondController(QObject):
         logger.info("Requested cancellation for document import.")
 
     def _handle_load_finished(self, extracted_rows):
-        self.import_rows = extracted_rows
+        self.import_rows = [self._normalize_row(row) for row in extracted_rows]
         self._apply_format_profile(self._source_type_for_rows(extracted_rows))
         self._populate_preview_table()
         if self.import_rows:

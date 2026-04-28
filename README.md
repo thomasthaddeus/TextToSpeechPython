@@ -195,7 +195,7 @@ speaker labels in the generated prompt text.
 
 `Import Document` opens a structured import dialog with:
 
-- a row-based preview of extracted document sections
+- an editable row-based review table of extracted document sections
 - heading-aware rows for DOCX, HTML, and EPUB content where available
 - table and spreadsheet rows that keep sheet, column, and table context
 - format-aware column labels and import modes, such as slide notes, page text,
@@ -203,6 +203,8 @@ speaker labels in the generated prompt text.
 - multi-row selection
 - content modes that adapt to the loaded format, such as page text, slide
   notes, chapter text, OCR text, image text, or spreadsheet row context
+- review actions for cleaning, splitting, merging, duplicating, deleting, and
+  restoring imported rows before generation
 
 Supported local source types include `.txt`, `.docx`, `.pdf`, `.html`, `.htm`,
 `.rtf`, `.epub`, `.xlsx`, `.xls`, `.csv`, `.pptx`, `.png`, `.jpg`, `.jpeg`,
@@ -210,8 +212,9 @@ Supported local source types include `.txt`, `.docx`, `.pdf`, `.html`, `.htm`,
 
 From that dialog you can:
 
-- import the selected rows into the main editor
-- batch export the selected rows to one `.mp3` per item
+- edit extracted titles, narration text, and context before using them
+- import the selected reviewed rows into the main editor
+- batch export the selected reviewed rows to one `.mp3` per item
 - cancel active document-load or batch-export work without closing the app
 
 The main window also supports quick source import from `File > Open Document`,
