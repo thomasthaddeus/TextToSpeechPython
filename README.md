@@ -87,6 +87,40 @@ or:
 poetry run tts-app
 ```
 
+## Building A Windows Executable
+
+The repository includes a PyInstaller workflow for creating a Windows folder
+build:
+
+```powershell
+.\scripts\build_windows_exe.ps1 -Clean
+```
+
+PyQt builds can take several minutes. Build output is also written to
+`data/dynamic/tmp/pyinstaller_build.log` so packaging failures can be reviewed
+after the command finishes.
+
+The executable is written to:
+
+```text
+dist/TextToSpeech/TextToSpeech.exe
+```
+
+The build bundles the application code, `app/assets/`, and `docs/` so the app
+stylesheet, icons, and in-app setup guide are available from the executable.
+
+Before sharing a build, verify it on a clean Windows machine. Provider
+credentials are intentionally not bundled, and OCR still requires the native
+Tesseract executable to be installed on the target machine and available on
+`PATH`.
+
+If the executable reports a missing Azure Speech DLL, rebuild with `-Clean` so
+PyInstaller recollects the native SDK libraries:
+
+```powershell
+.\scripts\build_windows_exe.ps1 -Clean
+```
+
 ## Provider Configuration
 
 The app can start without a configured TTS provider, but generation and export

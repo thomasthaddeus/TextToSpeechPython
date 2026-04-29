@@ -45,6 +45,7 @@ from app.model.tts_providers import (
     resolve_tts_provider_config,
 )
 from app.utils.logging_config import configure_logging
+from app.utils.resources import resource_path
 from app.utils.text_cleaner import TextCleaner
 
 
@@ -1254,7 +1255,7 @@ class MainController(QObject):
         )
 
     def open_setup_guide(self):
-        guide_path = Path("docs/setup_guide.md").resolve()
+        guide_path = resource_path("docs/setup_guide.md").resolve()
         if not guide_path.exists():
             QMessageBox.warning(
                 self.view,
