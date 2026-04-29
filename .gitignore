@@ -27,10 +27,11 @@ share/python-wheels/
 MANIFEST
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+#  Build output is ignored, but the application spec is source for the Windows
+#  executable workflow.
 *.manifest
 *.spec
+!TextToSpeech.spec
 
 # Installer logs
 pip-log.txt
@@ -161,7 +162,8 @@ cython_debug/
 
 .config/
 app/.conf/pyproject.toml
-scripts/
+scripts/*
+!scripts/build_windows_exe.ps1
 notes.*
 data/dynamic/tmp/*
 data/dynamic/app_settings.json
