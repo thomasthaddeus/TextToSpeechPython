@@ -87,6 +87,7 @@ QPushButton:disabled {
 
 QLineEdit,
 QTextEdit,
+QTextBrowser,
 QPlainTextEdit,
 QListWidget,
 QTableWidget,
@@ -100,6 +101,7 @@ QComboBox {
 }
 
 QTextEdit,
+QTextBrowser,
 QListWidget,
 QTableWidget {
     alternate-background-color: #f8f2e8;

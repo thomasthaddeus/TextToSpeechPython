@@ -216,6 +216,7 @@ class Ui_MainWindow:
         self.actionExit = QAction("Exit", main_window)
         self.actionSettings = QAction("Settings", main_window)
         self.actionOpenScraper = QAction("Import Document", main_window)
+        self.actionSetupGuide = QAction("Setup Guide", main_window)
         self.actionAbout = QAction("About", main_window)
 
         self.menuFile.addAction(self.actionOpenText)
@@ -227,6 +228,8 @@ class Ui_MainWindow:
         self.menuFile.addAction(self.actionExit)
         self.menuTools.addAction(self.actionSettings)
         self.menuTools.addAction(self.actionOpenScraper)
+        self.menuHelp.addAction(self.actionSetupGuide)
+        self.menuHelp.addSeparator()
         self.menuHelp.addAction(self.actionAbout)
 
         self.menubar.addMenu(self.menuFile)

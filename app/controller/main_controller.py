@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QMessageBox,
+    QWidget,
 )
 
 try:
@@ -33,6 +34,7 @@ from app.controller.background_workers import (
 from app.controller.second_controller import SecondController
 from app.controller.settings_controller import SettingsController
 from app.gui.second_window import SecondApp
+from app.gui.setup_guide_dialog import SetupGuideDialog
 from app.model.app_settings import AppSettings
 from app.model.processors.tts_processor import TTSProcessor
 from app.model.scraper.document_scraper import DocumentScraper
@@ -83,6 +85,7 @@ class MainController(QObject):
         self.settings_controller = SettingsController(self.view)
         self.second_window = None
         self.second_controller = None
+        self.setup_guide_dialog = None
         self.latest_audio_path = None
         self.preview_audio_path = None
         self.playing_history_audio_path = None
@@ -136,6 +139,7 @@ class MainController(QObject):
         self.view.actionExit.triggered.connect(self.view.close)
         self.view.actionSettings.triggered.connect(self.toggle_settings_sidebar)
         self.view.actionOpenScraper.triggered.connect(self.open_second_window)
+        self.view.actionSetupGuide.triggered.connect(self.open_setup_guide)
         self.view.actionAbout.triggered.connect(self.show_about)
         self.view.textEdit.textChanged.connect(self._handle_editor_text_changed)
         self.view.historyList.itemDoubleClicked.connect(
@@ -1248,6 +1252,32 @@ class MainController(QObject):
                 "provider-backed speech synthesis, SSML previewing, and multi-format document imports."
             ),
         )
+
+    def open_setup_guide(self):
+        guide_path = Path("docs/setup_guide.md").resolve()
+        if not guide_path.exists():
+            QMessageBox.warning(
+                self.view,
+                "Setup Guide Missing",
+                "The setup guide could not be found at docs/setup_guide.md.",
+            )
+            self.view.statusbar.showMessage("Setup guide file was not found.")
+            logger.warning("Setup guide was not found at {}", guide_path)
+            return
+
+        if (
+            self.__dict__.get("setup_guide_dialog") is not None
+            and self.setup_guide_dialog.isVisible()
+        ):
+            self.setup_guide_dialog.raise_()
+            self.setup_guide_dialog.activateWindow()
+            return
+
+        parent = self.view if isinstance(self.view, QWidget) else None
+        self.setup_guide_dialog = SetupGuideDialog(guide_path, parent)
+        self.setup_guide_dialog.show()
+        self.view.statusbar.showMessage("Opened setup guide inside the app.")
+        logger.info("Opened in-app setup guide at {}", guide_path)
 
     def _cleanup_preview_audio(self):
         if not self.preview_audio_path:
