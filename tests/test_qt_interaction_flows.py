@@ -30,6 +30,43 @@ def test_file_menu_exposes_source_and_export_actions(qt_app):
     ]
 
 
+def test_help_menu_exposes_setup_guide(qt_app):
+    del qt_app
+    window = QMainWindow()
+    ui = Ui_MainWindow()
+    ui.setupUi(window)
+
+    help_actions = [
+        action.text()
+        for action in ui.menuHelp.actions()
+        if not action.isSeparator()
+    ]
+
+    assert help_actions == [
+        "Setup Guide",
+        "About",
+    ]
+
+
+def test_setup_guide_opens_inside_application(qt_app):
+    window = QMainWindow()
+    ui = Ui_MainWindow()
+    ui.setupUi(window)
+    controller = MainController.__new__(MainController)
+    controller.view = ui
+    controller.setup_guide_dialog = None
+
+    controller.open_setup_guide()
+    qt_app.processEvents()
+
+    assert controller.setup_guide_dialog is not None
+    assert controller.setup_guide_dialog.isVisible()
+    assert "Install And Setup Guide" in controller.setup_guide_dialog.browser.toPlainText()
+    assert "Opened setup guide inside the app" in ui.statusbar.currentMessage()
+
+    controller.setup_guide_dialog.close()
+
+
 def test_history_list_is_actionable_from_real_widget(qt_app):
     del qt_app
     window = QMainWindow()

@@ -1,6 +1,6 @@
 [project]
 name = "texttospeechpython"
-version = "0.1.11"
+version = "0.1.13"
 description = "PyQt desktop app for experimenting with Azure text-to-speech and SSML workflows."
 readme = "README.md"
 authors = [{ name = "Thaddeus Thomas" }]

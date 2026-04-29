@@ -15,6 +15,7 @@ Contents
 Supporting Guides
 -----------------
 
+- `Install and setup guide <setup_guide.md>`_
 - `Azure configuration <api_config.md>`_
 - `Gemini TTS configuration <gemini_config.md>`_
 - `Offline Python TTS configuration <local_tts_config.md>`_

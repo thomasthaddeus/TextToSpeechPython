@@ -54,6 +54,11 @@ user's machine and available on `PATH`. Poetry installs the Python bridge
 package (`pytesseract`), but it cannot install the operating-system OCR engine
 itself.
 
+For a complete first-time setup path covering Poetry, Tesseract OCR, runtime
+folders, local requirements, and provider-specific configuration, see
+[docs/setup_guide.md](docs/setup_guide.md). The same guide is also available
+inside the application through `Help > Setup Guide`.
+
 ## Version Bumping
 
 To have VS Code commits automatically bump the patch version in
