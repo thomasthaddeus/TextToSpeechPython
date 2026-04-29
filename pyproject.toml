@@ -1,6 +1,6 @@
 [project]
 name = "texttospeechpython"
-version = "0.1.13"
+version = "0.2.0"
 description = "PyQt desktop app for experimenting with Azure text-to-speech and SSML workflows."
 readme = "README.md"
 authors = [{ name = "Thaddeus Thomas" }]
@@ -29,6 +29,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pyinstaller",
     "pytest",
     "pytest-qt",
 ]
@@ -62,6 +63,7 @@ xlrd = "*"
 xlsxwriter = "*"
 
 [tool.poetry.group.dev.dependencies]
+pyinstaller = "*"
 pytest = "*"
 pytest-qt = "*"
 
